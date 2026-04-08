@@ -21,6 +21,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Dev/test scripts
+test_api.py
+custom_components/__init__.py
+
 # Virtual environments
 venv/
 env/

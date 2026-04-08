@@ -2,22 +2,43 @@
   "config": {
     "step": {
       "user": {
-        "title": "Powershop Account Setup",
-        "description": "Enter your Powershop account credentials",
+        "title": "Powershop – Sign In",
+        "description": "Enter the email address registered with your Powershop account. A one-time code will be sent to that address.",
         "data": {
-          "username": "Email Address",
-          "password": "Password"
+          "email": "Email Address"
+        }
+      },
+      "otp": {
+        "title": "Powershop – Enter Code",
+        "description": "Enter the sign-in code sent to {email}.",
+        "data": {
+          "otp": "One-Time Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Powershop – Re-authenticate",
+        "description": "Your session for {email} has expired. Click Submit to send a new sign-in code.",
+        "data": {}
+      },
+      "reauth_otp": {
+        "title": "Powershop – Enter Code",
+        "description": "Enter the sign-in code sent to {email}.",
+        "data": {
+          "otp": "One-Time Code"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to Powershop website. Please check your internet connection.",
-      "invalid_auth": "Authentication failed. This could be due to: 1) Invalid email/password, 2) Account locked due to multiple failed attempts, 3) Account suspended. Please verify credentials or reset your password if needed.",
-      "account_locked": "Account appears to be locked. Please use the 'Reset/Create Password' link on the Powershop website to unlock your account.",
-      "unknown": "Unexpected error occurred during setup. Please try again."
+      "cannot_connect": "Failed to connect to Powershop. Please check your internet connection.",
+      "email_not_found": "That email address was not found on any Powershop account.",
+      "invalid_otp": "The code was incorrect or has expired. Please try again.",
+      "invalid_auth": "Authentication failed. Please restart setup.",
+      "no_accounts": "No Powershop accounts were found for this email.",
+      "unknown": "An unexpected error occurred. Please try again."
     },
     "abort": {
-      "already_configured": "This Powershop account is already configured"
+      "already_configured": "This Powershop account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
     }
   }
 }

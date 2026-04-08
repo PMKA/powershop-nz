@@ -1,422 +1,352 @@
-"""Powershop API client."""
-import re
+"""Powershop API client using Firebase auth and GraphQL."""
+import uuid
 import logging
-from typing import Optional, Dict, Any
+import re
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 import aiohttp
-from bs4 import BeautifulSoup
+
+from .const import (
+    BRAND,
+    BRAND_GQL,
+    EMAIL_CONNECTOR_URL,
+    FIREBASE_API_KEY,
+    FIREBASE_REFRESH_URL,
+    FIREBASE_SIGN_IN_URL,
+    GRAPHQL_URL,
+    OTP_VALIDATOR_URL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-class PowershopAPIClient:
-    """Client for interacting with Powershop API."""
-    
-    def __init__(self, username: str, password: str):
-        """Initialize the API client."""
-        self.username = username
-        self.password = password
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.customer_id: Optional[str] = None
-        self.base_url = "https://secure.powershop.co.nz"
-        self._last_auth_attempt = None
-        self._auth_failures = 0
-    
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session."""
-        if self.session is None or self.session.closed:
-            # Create session with proper timeout and connector settings
-            timeout = aiohttp.ClientTimeout(total=30)
-            connector = aiohttp.TCPConnector(limit=10, ttl_dns_cache=300)
-            self.session = aiohttp.ClientSession(
-                timeout=timeout, 
-                connector=connector,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
-            )
-        return self.session
-    
-    async def close(self):
-        """Close the session."""
-        if self.session and not self.session.closed:
-            await self.session.close()
-        
-    async def authenticate(self) -> bool:
-        """Authenticate with Powershop."""
-        import asyncio
-        from datetime import datetime, timedelta
-        
-        # Rate limiting: wait between authentication attempts
-        if self._last_auth_attempt:
-            time_since_last = datetime.now() - self._last_auth_attempt
-            if time_since_last < timedelta(seconds=5):
-                wait_time = 5 - time_since_last.total_seconds()
-                _LOGGER.info(f"Rate limiting: waiting {wait_time:.1f}s before authentication attempt")
-                await asyncio.sleep(wait_time)
-        
-        # Prevent too many failed attempts
-        if self._auth_failures >= 3:
-            _LOGGER.error("Too many authentication failures. Please check credentials and wait before retrying.")
-            return False
-        
-        self._last_auth_attempt = datetime.now()
-        session = await self._get_session()
-        
-        try:
-            # Get login page to extract CSRF token - use root URL
-            async with session.get(self.base_url) as login_page:
-                login_page.raise_for_status()
-                content = await login_page.text()
-            
-            soup = BeautifulSoup(content, 'html.parser')
-            csrf_token_element = soup.find('input', {'name': 'authenticity_token'})
-            if not csrf_token_element:
-                _LOGGER.error("Could not find CSRF token")
-                return False
-            
-            csrf_token = csrf_token_element['value']
-            
-            # Perform login - use root URL for login post as well
-            login_data = {
-                'authenticity_token': csrf_token,
-                'email': self.username,
-                'password': self.password,
-                'remember_me': '0',
-                'commit': 'Login'
-            }
-            
-            async with session.post(
-                self.base_url,
-                data=login_data,
-                allow_redirects=True
-            ) as response:
-                response.raise_for_status()
-                content = await response.text()
-                
-                # Check for authentication success/failure
-                soup_response = BeautifulSoup(content, 'html.parser')
-                
-                # Check for explicit failure messages including account lockout
-                error_patterns = [
-                    r'login.*failed',
-                    r'invalid.*credentials',
-                    r'authentication.*failed',
-                    r'account.*locked',
-                    r'password.*reset',
-                    r'too.*many.*attempts'
-                ]
-                
-                for pattern in error_patterns:
-                    error_messages = soup_response.find_all(text=re.compile(pattern, re.IGNORECASE))
-                    if error_messages:
-                        error_msg = '; '.join([msg.strip() for msg in error_messages])
-                        _LOGGER.error(f"Login failed with message: {error_msg}")
-                        return False
-                
-                # Check if we're still on the login page (indicates failure)
-                login_form = soup_response.find('form', action='/')
-                email_input = soup_response.find('input', {'name': 'email'})
-                if login_form and email_input:
-                    _LOGGER.error("Authentication failed: Still on login page after submission")
-                    return False
-                
-                # Extract customer ID from redirect URL or page content
-                if '/customers/' in str(response.url):
-                    # Extract from URL like /customers/288352
-                    customer_match = re.search(r'/customers/(\d+)', str(response.url))
-                    if customer_match:
-                        self.customer_id = customer_match.group(1)
-                
-                if not self.customer_id:
-                    # Try multiple patterns to find customer ID in page content
-                    search_text = str(response.url) + content
-                    customer_patterns = [
-                        r'/customers/(\d+)',
-                        r'customer[_-]?id["\']?\s*[:=]\s*["\']?(\d+)',
-                        r'data-customer[_-]?id["\']?\s*=\s*["\']?(\d+)',
-                        r'"customer"[^}]*"id"[:\s]*(\d+)',
-                        r'customerId["\']?\s*[:=]\s*["\']?(\d+)'
-                    ]
-                    
-                    for pattern in customer_patterns:
-                        matches = re.findall(pattern, search_text, re.IGNORECASE)
-                        if matches:
-                            self.customer_id = matches[0]
-                            break
-                
-                # Look for other success indicators if no customer ID found
-                if not self.customer_id:
-                    success_indicators = [
-                        'dashboard', 'account', 'balance', 'logout', 'welcome'
-                    ]
-                    
-                    content_lower = content.lower()
-                    url_lower = str(response.url).lower()
-                    
-                    for indicator in success_indicators:
-                        if indicator in content_lower or indicator in url_lower:
-                            _LOGGER.warning(f"Login appears successful (found '{indicator}') but no customer ID extracted")
-                            # Try to proceed anyway - some pages might not have customer ID immediately
-                            self.customer_id = "unknown"
-                            return True
-                
-                if self.customer_id and self.customer_id != "unknown":
-                    _LOGGER.info(f"Successfully authenticated, customer ID: {self.customer_id}")
-                    self._auth_failures = 0  # Reset failure count on success
-                    return True
-                else:
-                    _LOGGER.error(f"Authentication failed: Could not extract customer ID. URL: {response.url}")
-                    self._auth_failures += 1
-                    return False
-                
-        except Exception as e:
-            _LOGGER.error(f"Authentication error: {e}")
-            self._auth_failures += 1
-            return False
-    
-    async def get_rate_data(self) -> Dict[str, Any]:
-        """Get current rate data from Powershop."""
-        if not self.customer_id:
-            raise ValueError("Not authenticated")
-        
-        session = await self._get_session()
-        
-        try:
-            # If customer ID is unknown, try to discover it by accessing the main page
-            if self.customer_id == "unknown":
-                async with session.get(self.base_url) as main_response:
-                    if main_response.status == 200:
-                        main_content = await main_response.text()
-                        
-                        # Try to extract customer ID from main authenticated page
-                        customer_patterns = [
-                            r'/customers/(\d+)',
-                            r'customer[_-]?id["\']?\s*[:=]\s*["\']?(\d+)',
-                        ]
-                        
-                        for pattern in customer_patterns:
-                            matches = re.findall(pattern, str(main_response.url) + main_content, re.IGNORECASE)
-                            if matches:
-                                self.customer_id = matches[0]
-                                _LOGGER.info(f"Discovered customer ID: {self.customer_id}")
-                                break
-                        
-                        if self.customer_id == "unknown":
-                            # Still couldn't find it, try to extract rate data from main page
-                            return self._extract_rates_from_content(main_content)
-            
-            # Get balance page which contains rate information
-            balance_url = f"{self.base_url}/customers/{self.customer_id}/balance"
-            async with session.get(balance_url) as response:
-                response.raise_for_status()
-                content = await response.text()
-            
-            # Use the enhanced extraction method
-            return self._extract_rates_from_content(content)
-            
-        except Exception as e:
-            _LOGGER.error(f"Error getting rate data: {e}")
-            raise
-    
-    async def get_usage_data(self) -> Dict[str, Any]:
-        """Get usage data from Powershop."""
-        if not self.customer_id:
-            raise ValueError("Not authenticated")
-        
-        session = await self._get_session()
-        
-        try:
-            # Try CSV endpoint for usage data
-            csv_url = f"{self.base_url}/customers/{self.customer_id}/usage.csv"
-            async with session.get(csv_url) as response:
-                if response.status == 200:
-                    # Parse CSV content
-                    csv_content = await response.text()
-                    lines = csv_content.strip().split('\n')
-                    if len(lines) > 1:  # Has header and data
-                        return {
-                            'csv_data': csv_content,
-                            'record_count': len(lines) - 1,
-                            'available': True
-                        }
-            
-            return {'available': False}
-            
-        except Exception as e:
-            _LOGGER.error(f"Error getting usage data: {e}")
-            return {'available': False}
-    
-    def _extract_rates_from_content(self, content: str) -> Dict[str, Any]:
-        """Extract detailed rate data from any HTML content."""
-        soup = BeautifulSoup(content, 'html.parser')
-        text_content = soup.get_text()
-        
-        # Extract time-based rate structure
-        rate_periods = self._extract_time_based_rates(text_content, soup)
-        
-        # Look for basic rate patterns as fallback
-        rate_patterns = [
-            r'(\d+\.\d+)\s*c/kWh',
-            r'(\d+\.\d+)\s*cents\s*per\s*kWh',
-            r'Rate:\s*(\d+\.\d+)',
-            r'Price:\s*(\d+\.\d+)',
-            r'(\d+\.\d+)\s*c\s*/\s*kWh',
-            r'(\d+\.\d+)\s*¢/kWh'
-        ]
-        
-        rates = []
-        for pattern in rate_patterns:
-            matches = re.findall(pattern, text_content, re.IGNORECASE)
-            rates.extend([float(match) for match in matches])
-        
-        # Remove duplicates and sort
-        unique_rates = sorted(list(set(rates)))
-        
-        # Also check tables for structured rate data
-        rate_tables = soup.find_all('table')
-        for table in rate_tables:
-            table_text = table.get_text().lower()
-            if 'rate' in table_text or 'price' in table_text or 'kwh' in table_text:
-                rows = table.find_all('tr')
-                for row in rows:
-                    cells = row.find_all(['td', 'th'])
-                    if len(cells) >= 2:
-                        cell_text = ' '.join([cell.get_text().strip() for cell in cells])
-                        rate_match = re.search(r'(\d+\.\d+)', cell_text)
-                        if rate_match and 'kwh' in cell_text.lower():
-                            rate_value = float(rate_match.group(1))
-                            if rate_value not in rates:
-                                rates.append(rate_value)
-        
-        return {
-            'rates': unique_rates,
-            'primary_rate': unique_rates[0] if unique_rates else None,
-            'rate_periods': rate_periods,
-            'customer_id': self.customer_id,
-            'last_updated': None  # Will be set by sensor
+
+# ---------------------------------------------------------------------------
+# GraphQL queries
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_VIEWER_QUERY = """
+query accountViewer($allowedBrandCodes: [BrandChoices]) {
+  viewer {
+    givenName
+    familyName
+    email
+    accounts(allowedBrandCodes: $allowedBrandCodes) {
+      number
+      status
+      ... on AccountType {
+        id
+        number
+        properties {
+          id
+          address
         }
-    
-    def _extract_time_based_rates(self, text_content: str, soup) -> Dict[str, Any]:
-        """Extract time-of-use rate periods and prices."""
-        rate_periods = {}
-        
-        # First, look for data-tooltip attributes which contain the structured data
-        tooltip_elements = soup.find_all(attrs={"data-tooltip": True})
-        
-        for element in tooltip_elements:
-            tooltip_text = element.get('data-tooltip', '')
-            
-            # Clean up tooltip text - normalize whitespace and newlines
-            cleaned_tooltip = re.sub(r'\s+', ' ', tooltip_text).strip()
-            
-            # Pattern for tooltip format: "Off Peak 12am - 7am 19.08 c/kWh" (with flexible whitespace)
-            tooltip_patterns = [
-                # Standard format with spaces
-                r'(Off Peak|Weekday Peak|Weekend Peak|Weekday Shoulder|Weekend Shoulder|Peak|Shoulder)\s+([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s+(\d+\.\d+)\s*c/kWh',
-                # Newline format - match across lines
-                r'(Off Peak|Weekday Peak|Weekend Peak|Weekday Shoulder|Weekend Shoulder|Peak|Shoulder)\s*[\n\r\s]*([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s*[\n\r\s]*(\d+\.\d+)\s*c/kWh'
-            ]
-            
-            matched = False
-            for pattern in tooltip_patterns:
-                # Try both original and cleaned text
-                for text_to_check in [tooltip_text, cleaned_tooltip]:
-                    match = re.search(pattern, text_to_check, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-                    if match:
-                        period_name = match.group(1).strip()
-                        time_range = match.group(2).strip()
-                        rate = float(match.group(3))
-                        
-                        rate_periods[period_name] = {
-                            'time_range': time_range,
-                            'rate': rate,
-                            'rate_formatted': f"{rate} c/kWh"
-                        }
-                        matched = True
-                        break
-                
-                if matched:
-                    break
-        
-        # If we found tooltip data, return it
-        if rate_periods:
-            return rate_periods
-        
-        # Clean up text content - remove extra whitespace and normalize
-        cleaned_text = re.sub(r'\s+', ' ', text_content).strip()
-        
-        # Enhanced patterns to match various text structures
-        time_patterns = [
-            # Pattern 1: "Off Peak 12am - 7am 19.08 c/kWh"
-            r'(Off Peak|Weekday Peak|Weekend Peak|Weekday Shoulder|Weekend Shoulder|Peak|Shoulder)\s+([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s+(\d+\.\d+)\s*c/kWh',
-            # Pattern 2: Multi-line format with newlines
-            r'(Off Peak|Weekday Peak|Weekend Peak|Weekday Shoulder|Weekend Shoulder|Peak|Shoulder)\s*\n?\s*([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s*\n?\s*(\d+\.\d+)\s*c/kWh',
-            # Pattern 3: More flexible with various whitespace
-            r'(Off Peak|Weekday Peak|Weekend Peak|Weekday Shoulder|Weekend Shoulder)\s*[\n\r\s]*([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s*[\n\r\s]*(\d+\.\d+)\s*c/kWh',
-        ]
-        
-        # Try each pattern against both cleaned and original text
-        for text_to_search in [cleaned_text, text_content]:
-            for pattern in time_patterns:
-                matches = re.finditer(pattern, text_to_search, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-                for match in matches:
-                    period_name = match.group(1).strip()
-                    time_range = match.group(2).strip()
-                    rate = float(match.group(3))
-                    
-                    # Avoid duplicates - use period name + time as key
-                    key = f"{period_name}_{time_range}"
-                    if key not in rate_periods:
-                        rate_periods[period_name] = {
-                            'time_range': time_range,
-                            'rate': rate,
-                            'rate_formatted': f"{rate} c/kWh"
-                        }
-                        _LOGGER.info(f"Found rate period: {period_name} ({time_range}) = {rate} c/kWh")
-        
-        # Also try extracting from specific HTML sections
-        rate_sections = soup.find_all(['div', 'section', 'table', 'span', 'p'], 
-                                    class_=lambda x: x and any(word in x.lower() 
-                                    for word in ['rate', 'tariff', 'price', 'plan', 'usage', 'time']))
-        
-        for section in rate_sections:
-            section_text = section.get_text()
-            cleaned_section = re.sub(r'\s+', ' ', section_text).strip()
-            
-            for text_to_search in [section_text, cleaned_section]:
-                for pattern in time_patterns:
-                    matches = re.finditer(pattern, text_to_search, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-                    for match in matches:
-                        period_name = match.group(1).strip()
-                        time_range = match.group(2).strip()
-                        rate = float(match.group(3))
-                        
-                        # Avoid duplicates
-                        key = f"{period_name}_{time_range}"
-                        if key not in rate_periods:
-                            rate_periods[period_name] = {
-                                'time_range': time_range,
-                                'rate': rate,
-                                'rate_formatted': f"{rate} c/kWh"
-                            }
-        
-        # If we still haven't found periods, try a more aggressive search
-        if not rate_periods:
-            # Look for any text that contains both time ranges and rates
-            aggressive_pattern = r'(\w+\s*\w*)\s*([0-9]{1,2}[ap]m\s*-\s*[0-9]{1,2}[ap]m)\s*(\d+\.\d+)'
-            matches = re.finditer(aggressive_pattern, text_content, re.IGNORECASE | re.MULTILINE)
-            
-            for match in matches:
-                potential_period = match.group(1).strip()
-                time_range = match.group(2).strip()
-                rate = float(match.group(3))
-                
-                # Only accept if it looks like a rate period name
-                if any(keyword in potential_period.lower() for keyword in ['peak', 'shoulder', 'off']):
-                    rate_periods[potential_period] = {
-                        'time_range': time_range,
-                        'rate': rate,
-                        'rate_formatted': f"{rate} c/kWh"
-                    }
-        
-        return rate_periods
+      }
+    }
+  }
+}
+"""
+
+_ACCOUNT_QUERY = """
+fragment AccountBalanceFragment on AccountType {
+  balance(includeAllLedgers: true)
+}
+
+query Account($accountNumber: String!) {
+  account(accountNumber: $accountNumber) {
+    id
+    ...AccountBalanceFragment
+    billingOptions {
+      nextBillingDate
+    }
+    bills(first: 1) {
+      edges {
+        node {
+          id
+          billType
+          fromDate
+          toDate
+          issuedDate
+        }
+      }
+    }
+  }
+}
+"""
+
+_AGREEMENTS_QUERY = """
+fragment AgreementFields on Agreement {
+  displayName
+  description
+  validFrom
+  validTo
+  rates {
+    label
+    displayLabel
+    hasDiscount
+    formattedRateExcludingTax
+    formattedRateIncludingTax
+  }
+}
+
+query Agreements($accountNumber: String!, $propertyId: ID!) {
+  account(accountNumber: $accountNumber) {
+    id
+    property(id: $propertyId) {
+      id
+      address
+      meterPoints {
+        id
+        marketIdentifier
+        activeAgreement {
+          ...AgreementFields
+        }
+      }
+    }
+  }
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+class AuthError(Exception):
+    """Raised when authentication fails (email not found, token expired, etc.)."""
+
+
+class OTPError(Exception):
+    """Raised when OTP verification fails."""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_rate(formatted: str) -> Optional[float]:
+    """Parse a numeric rate value from a formatted string like '23.45 c/kWh'."""
+    if not formatted:
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)", formatted)
+    return float(match.group(1)) if match else None
+
+
+# ---------------------------------------------------------------------------
+# API client
+# ---------------------------------------------------------------------------
+
+class PowershopAPIClient:
+    """Client for Powershop using Firebase email-OTP auth and GraphQL."""
+
+    def __init__(self, refresh_token: Optional[str] = None) -> None:
+        self.refresh_token = refresh_token
+        self._id_token: Optional[str] = None
+        self._id_token_expires_at: Optional[datetime] = None
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    # ------------------------------------------------------------------
+    # OTP authentication (step 1 + step 2)
+    # ------------------------------------------------------------------
+
+    async def send_otp(self, email: str) -> str:
+        """Send a sign-in OTP to *email*. Returns the journeyId."""
+        journey_id = str(uuid.uuid4())
+        session = await self._get_session()
+        payload = {
+            "email": email,
+            "brand": BRAND,
+            "redirectUrl": "https://app.powershop.nz",
+            "journeyId": journey_id,
+            "otpEnabled": True,
+        }
+        async with session.post(
+            EMAIL_CONNECTOR_URL,
+            json=payload,
+            headers={"content-type": "application/json", "X-Client-Platform": "web"},
+        ) as resp:
+            if resp.status == 404:
+                raise AuthError("Email address not found on any Powershop account")
+            if not resp.ok:
+                raise AuthError(f"Failed to send OTP: HTTP {resp.status}")
+        return journey_id
+
+    async def verify_otp(self, email: str, otp: str, journey_id: str) -> Dict[str, str]:
+        """Verify *otp* and return ``{"id_token": ..., "refresh_token": ...}``."""
+        session = await self._get_session()
+        payload = {
+            "email": email,
+            "otp": otp,
+            "brand": BRAND,
+            "journeyId": journey_id,
+        }
+        async with session.post(
+            OTP_VALIDATOR_URL,
+            json=payload,
+            headers={"content-type": "application/json", "X-Client-Platform": "web"},
+        ) as resp:
+            data = await resp.json()
+            if not resp.ok:
+                raise OTPError(data.get("error", "OTP verification failed"))
+            custom_token = data.get("customToken")
+            if not custom_token:
+                raise OTPError("No custom token returned by OTP validator")
+
+        return await self._exchange_custom_token(custom_token)
+
+    # ------------------------------------------------------------------
+    # Firebase token management
+    # ------------------------------------------------------------------
+
+    async def _exchange_custom_token(self, custom_token: str) -> Dict[str, str]:
+        """Exchange a Firebase custom token for an ID token + refresh token."""
+        session = await self._get_session()
+        async with session.post(
+            f"{FIREBASE_SIGN_IN_URL}?key={FIREBASE_API_KEY}",
+            json={"token": custom_token, "returnSecureToken": True},
+        ) as resp:
+            data = await resp.json()
+            if not resp.ok:
+                raise AuthError(f"Firebase custom-token exchange failed: {data}")
+            id_token = data["idToken"]
+            refresh_token = data["refreshToken"]
+            expires_in = int(data.get("expiresIn", 3600))
+
+        self._id_token = id_token
+        self.refresh_token = refresh_token
+        self._id_token_expires_at = datetime.now() + timedelta(seconds=expires_in - 60)
+        return {"id_token": id_token, "refresh_token": refresh_token}
+
+    async def _refresh_id_token(self) -> None:
+        """Use the stored refresh token to obtain a fresh ID token."""
+        if not self.refresh_token:
+            raise AuthError("No refresh token – re-authentication required")
+        session = await self._get_session()
+        async with session.post(
+            f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
+            data=f"grant_type=refresh_token&refresh_token={self.refresh_token}",
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        ) as resp:
+            data = await resp.json()
+            if not resp.ok:
+                raise AuthError(f"Token refresh failed: {data}")
+            self._id_token = data["id_token"]
+            self.refresh_token = data["refresh_token"]
+            expires_in = int(data.get("expires_in", 3600))
+            self._id_token_expires_at = datetime.now() + timedelta(seconds=expires_in - 60)
+
+    async def _ensure_valid_token(self) -> str:
+        """Return a valid ID token, refreshing if necessary."""
+        if (
+            self._id_token is None
+            or self._id_token_expires_at is None
+            or datetime.now() >= self._id_token_expires_at
+        ):
+            await self._refresh_id_token()
+        return self._id_token
+
+    # ------------------------------------------------------------------
+    # GraphQL
+    # ------------------------------------------------------------------
+
+    async def _graphql(
+        self, query: str, variables: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Execute a GraphQL query against the Powershop API."""
+        id_token = await self._ensure_valid_token()
+        session = await self._get_session()
+        payload: Dict[str, Any] = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        async with session.post(
+            GRAPHQL_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {id_token}",
+                "content-type": "application/json",
+            },
+        ) as resp:
+            body = await resp.text()
+            if not resp.ok:
+                _LOGGER.error("GraphQL HTTP %s: %s", resp.status, body)
+                raise ValueError(f"GraphQL HTTP {resp.status}: {body[:500]}")
+            data = await resp.json(content_type=None)
+        if "errors" in data:
+            _LOGGER.error("GraphQL errors: %s", data["errors"])
+            raise ValueError(data["errors"][0].get("message", "GraphQL error"))
+        return data.get("data", {})
+
+    # ------------------------------------------------------------------
+    # High-level data methods
+    # ------------------------------------------------------------------
+
+    async def get_account_info(self) -> Dict[str, Any]:
+        """Return viewer + account list (account numbers, property IDs)."""
+        return await self._graphql(
+            _ACCOUNT_VIEWER_QUERY, {"allowedBrandCodes": [BRAND_GQL]}
+        )
+
+    async def get_account_data(self, account_number: str) -> Dict[str, Any]:
+        """Return balance and billing info for *account_number*."""
+        data = await self._graphql(_ACCOUNT_QUERY, {"accountNumber": account_number})
+        return data.get("account", {})
+
+    async def get_agreements(
+        self, account_number: str, property_id: str
+    ) -> Dict[str, Any]:
+        """Return active rate agreements for a property."""
+        data = await self._graphql(
+            _AGREEMENTS_QUERY,
+            {"accountNumber": account_number, "propertyId": property_id},
+        )
+        return data.get("account", {})
+
+    async def get_rate_data(
+        self, account_number: str, property_id: str
+    ) -> Dict[str, Any]:
+        """Return a combined dict of balance + rate periods for the coordinator."""
+        account_data = await self.get_account_data(account_number)
+        agreement_data = await self.get_agreements(account_number, property_id)
+
+        raw_balance = account_data.get("balance")
+        balance = round(raw_balance / 100, 2) if raw_balance is not None else None
+        next_billing_date = (
+            (account_data.get("billingOptions") or {}).get("nextBillingDate")
+        )
+
+        # Extract rates from the first meter point's active agreement
+        rate_periods: Dict[str, Any] = {}
+        property_node = agreement_data.get("property", {})
+        for mp in property_node.get("meterPoints", []):
+            agreement = mp.get("activeAgreement") or {}
+            for rate in agreement.get("rates", []):
+                label = rate.get("displayLabel") or rate.get("label") or "Unknown"
+                raw_rate = _parse_rate(rate.get("formattedRateIncludingTax"))
+                rate_periods[label] = {
+                    "rate": round(raw_rate * 100, 4) if raw_rate is not None else None,
+                    "rate_formatted": rate.get("formattedRateIncludingTax"),
+                    "rate_excl_tax": rate.get("formattedRateExcludingTax"),
+                    "has_discount": rate.get("hasDiscount", False),
+                }
+            break  # Only process first meter point
+
+        return {
+            "balance": balance,
+            "next_billing_date": next_billing_date,
+            "rate_periods": rate_periods,
+            "account_number": account_number,
+        }

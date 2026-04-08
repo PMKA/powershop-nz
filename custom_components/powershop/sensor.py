@@ -3,16 +3,16 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-import aiohttp
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
-    SensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CURRENCY_DOLLAR
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -20,224 +20,188 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .api import PowershopAPIClient
-from .const import DOMAIN
+from .api import AuthError, PowershopAPIClient
+from .const import (
+    CONF_ACCOUNT_NUMBER,
+    CONF_PROPERTY_ID,
+    CONF_REFRESH_TOKEN,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=15)
 
+# Keyword sets used for matching rate labels from the API
+_OFF_PEAK_KEYWORDS = {"off peak", "offpeak", "night", "low", "uncontrolled"}
+_PEAK_KEYWORDS = {"peak", "day", "weekday peak", "high"}
+_SHOULDER_KEYWORDS = {"shoulder", "weekend", "controlled"}
+_STANDING_KEYWORDS = {"daily", "standing", "fixed", "supply"}
+
 SENSORS = [
+    SensorEntityDescription(
+        key="balance",
+        name="Balance",
+        native_unit_of_measurement=CURRENCY_DOLLAR,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:currency-usd",
+    ),
     SensorEntityDescription(
         key="off_peak_rate",
         name="Off Peak Rate",
         native_unit_of_measurement="c/kWh",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=None,
         icon="mdi:clock-outline",
     ),
     SensorEntityDescription(
         key="peak_rate",
-        name="Peak Rate", 
+        name="Peak Rate",
         native_unit_of_measurement="c/kWh",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=None,
         icon="mdi:clock-alert",
     ),
     SensorEntityDescription(
         key="shoulder_rate",
         name="Shoulder Rate",
-        native_unit_of_measurement="c/kWh", 
-        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement="c/kWh",
         state_class=None,
         icon="mdi:clock",
     ),
 ]
 
-class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from Powershop API."""
 
-    def __init__(self, hass: HomeAssistant, client: PowershopAPIClient) -> None:
-        """Initialize."""
+def _match_rate(rate_periods: Dict[str, Any], keywords: set) -> Optional[float]:
+    """Return the first rate whose label contains any of *keywords*."""
+    for label, data in rate_periods.items():
+        if any(kw in label.lower() for kw in keywords):
+            return data.get("rate")
+    return None
+
+
+class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
+    """Manage fetching data from the Powershop GraphQL API."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: PowershopAPIClient,
+        config_entry: ConfigEntry,
+    ) -> None:
         self.client = client
-        
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            update_interval=SCAN_INTERVAL,
-        )
+        self._config_entry = config_entry
+        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
 
     async def async_shutdown(self) -> None:
-        """Clean up resources."""
         await self.client.close()
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Update data via library."""
+        account_number = self._config_entry.data[CONF_ACCOUNT_NUMBER]
+        property_id = self._config_entry.data.get(CONF_PROPERTY_ID)
+
         try:
-            # Ensure we're still authenticated
-            if not self.client.customer_id:
-                auth_result = await self.client.authenticate()
-                if not auth_result:
-                    raise UpdateFailed("Authentication failed")
-            
-            # Get rate data
-            rate_data = await self.client.get_rate_data()
-            rate_data['last_updated'] = datetime.now()
-            
-            # Get usage data if available
-            try:
-                usage_data = await self.client.get_usage_data()
-                rate_data.update(usage_data)
-            except Exception as e:
-                _LOGGER.warning(f"Could not fetch usage data: {e}")
-                rate_data['usage_available'] = False
-            
-            return rate_data
-            
-        except aiohttp.ClientError as e:
-            raise UpdateFailed(f"Network error: {e}")
-        except Exception as e:
-            raise UpdateFailed(f"Error communicating with API: {e}")
+            data = await self.client.get_rate_data(account_number, property_id)
+        except AuthError as err:
+            # Refresh token expired/revoked – trigger HA re-auth flow
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with Powershop API: {err}") from err
+
+        # If the refresh token was rotated, persist the new one
+        if self.client.refresh_token != self._config_entry.data.get(CONF_REFRESH_TOKEN):
+            self.hass.config_entries.async_update_entry(
+                self._config_entry,
+                data={
+                    **self._config_entry.data,
+                    CONF_REFRESH_TOKEN: self.client.refresh_token,
+                },
+            )
+
+        data["last_updated"] = datetime.now()
+        return data
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
-    
-    # Get credentials from config
-    username = config_entry.data[CONF_USERNAME]
-    password = config_entry.data[CONF_PASSWORD]
-    
-    # Create API client
-    client = PowershopAPIClient(username, password)
-    
-    # Create coordinator
-    coordinator = PowershopDataUpdateCoordinator(hass, client)
-    
-    # Store coordinator for cleanup
+    """Set up the Powershop sensor platform."""
+    client = PowershopAPIClient(
+        refresh_token=config_entry.data[CONF_REFRESH_TOKEN]
+    )
+    coordinator = PowershopDataUpdateCoordinator(hass, client, config_entry)
+
     hass.data[DOMAIN][f"{config_entry.entry_id}_coordinator"] = coordinator
-    
-    # Fetch initial data so we have data when entities subscribe
+
     await coordinator.async_config_entry_first_refresh()
-    
-    # Create sensors
-    entities = []
-    for sensor_description in SENSORS:
-        entities.append(PowershopSensor(coordinator, sensor_description))
-    
-    async_add_entities(entities)
+
+    async_add_entities(
+        PowershopSensor(coordinator, description, config_entry)
+        for description in SENSORS
+    )
+
 
 class PowershopSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Powershop sensor."""
+    """A sensor that reads from the Powershop coordinator."""
 
     def __init__(
         self,
         coordinator: PowershopDataUpdateCoordinator,
         description: SensorEntityDescription,
+        config_entry: ConfigEntry,
     ) -> None:
-        """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.client.customer_id}_{description.key}"
+        account_number = config_entry.data.get(CONF_ACCOUNT_NUMBER, "unknown")
+        self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.client.customer_id)},
-            "name": f"Powershop Account {coordinator.client.customer_id}",
-            "manufacturer": "Powershop",
+            "identifiers": {(DOMAIN, account_number)},
+            "name": f"Powershop Account {account_number}",
+            "manufacturer": "Powershop NZ",
             "model": "Customer Account",
         }
 
     @property
     def native_value(self) -> Any:
-        """Return the state of the sensor."""
         if not self.coordinator.data:
             return None
-        
-        rate_periods = self.coordinator.data.get("rate_periods", {})
-        
-        if self.entity_description.key == "off_peak_rate":
-            # Look for off-peak rate
-            for period_name, period_data in rate_periods.items():
-                if "off peak" in period_name.lower():
-                    return period_data["rate"]
-            return None
-            
-        elif self.entity_description.key == "peak_rate":
-            # Look for peak rate (prefer weekday peak)
-            for period_name, period_data in rate_periods.items():
-                if "peak" in period_name.lower() and "weekday" in period_name.lower():
-                    return period_data["rate"]
-            # Fallback to any peak
-            for period_name, period_data in rate_periods.items():
-                if "peak" in period_name.lower():
-                    return period_data["rate"]
-            return None
-            
-        elif self.entity_description.key == "shoulder_rate":
-            # Look for shoulder rate
-            for period_name, period_data in rate_periods.items():
-                if "shoulder" in period_name.lower():
-                    return period_data["rate"]
-            return None
-        
+
+        data = self.coordinator.data
+        key = self.entity_description.key
+
+        if key == "balance":
+            return data.get("balance")
+
+        rate_periods = data.get("rate_periods", {})
+
+        if key == "off_peak_rate":
+            return _match_rate(rate_periods, _OFF_PEAK_KEYWORDS)
+        if key == "peak_rate":
+            return _match_rate(rate_periods, _PEAK_KEYWORDS)
+        if key == "shoulder_rate":
+            return _match_rate(rate_periods, _SHOULDER_KEYWORDS)
+
         return None
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
-        """Return the state attributes."""
         if not self.coordinator.data:
             return {}
-            
-        # Basic attributes for all sensors
-        attrs = {
-            "customer_id": self.coordinator.client.customer_id,
-            "last_updated": self.coordinator.data.get("last_updated"),
+
+        data = self.coordinator.data
+        attrs: Dict[str, Any] = {
+            "account_number": data.get("account_number"),
+            "last_updated": data.get("last_updated"),
         }
-        
-        rate_periods = self.coordinator.data.get("rate_periods", {})
-        
-        # Find the specific period data for this sensor
-        period_data = None
-        period_name = None
-        
-        if self.entity_description.key == "off_peak_rate":
-            for name, data in rate_periods.items():
-                if "off peak" in name.lower():
-                    period_data = data
-                    period_name = name
-                    break
-                    
-        elif self.entity_description.key == "peak_rate":
-            # Prefer weekday peak
-            for name, data in rate_periods.items():
-                if "peak" in name.lower() and "weekday" in name.lower():
-                    period_data = data
-                    period_name = name
-                    break
-            # Fallback to any peak
-            if not period_data:
-                for name, data in rate_periods.items():
-                    if "peak" in name.lower():
-                        period_data = data
-                        period_name = name
-                        break
-                        
-        elif self.entity_description.key == "shoulder_rate":
-            for name, data in rate_periods.items():
-                if "shoulder" in name.lower():
-                    period_data = data
-                    period_name = name
-                    break
-        
-        # Add sensor-specific attributes
-        if period_data and period_name:
-            attrs.update({
-                "period_name": period_name,
-                "time_range": period_data["time_range"],
-                "rate_value": period_data["rate"],
-                "rate_formatted": period_data["rate_formatted"]
-            })
-        
+
+        if self.entity_description.key == "balance":
+            attrs["next_billing_date"] = data.get("next_billing_date")
+
+        rate_periods = data.get("rate_periods", {})
+        if self.entity_description.key in ("off_peak_rate", "peak_rate", "shoulder_rate"):
+            attrs["all_rates"] = {
+                label: d.get("rate_formatted") for label, d in rate_periods.items()
+            }
+
         return attrs
