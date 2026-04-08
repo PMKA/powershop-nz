@@ -92,6 +92,14 @@ SENSORS = [
         state_class=SensorStateClass.TOTAL,
         icon="mdi:cash",
     ),
+    SensorEntityDescription(
+        key="voucher_balance",
+        name="Voucher Balance",
+        native_unit_of_measurement=CURRENCY_DOLLAR,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:ticket-percent",
+    ),
 ]
 
 
@@ -211,6 +219,8 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
             return data.get("usage_period_kwh")
         if key == "cost_billing_period":
             return data.get("cost_period_nzd")
+        if key == "voucher_balance":
+            return data.get("voucher_balance_nzd")
 
         return None
 
@@ -232,6 +242,10 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.key == "cost_billing_period":
             attrs["billing_period_start"] = data.get("period_start")
             attrs["billing_period_end"] = data.get("period_end")
+
+        if self.entity_description.key == "voucher_balance":
+            attrs["voucher_count"] = data.get("voucher_count")
+            attrs["vouchers"] = data.get("voucher_list", [])
 
         rate_periods = data.get("rate_periods", {})
         if self.entity_description.key in ("off_peak_rate", "peak_rate", "shoulder_rate"):

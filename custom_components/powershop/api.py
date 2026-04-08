@@ -118,6 +118,33 @@ query measurements(
 }
 """
 
+_VOUCHERS_QUERY = """
+query vouchersForAccount($accountNumber: String!) {
+  vouchersForAccount(accountNumber: $accountNumber) {
+    edges {
+      node {
+        id
+        displayName
+        availableFrom
+        purchasedAt
+        voucherValue
+        balance
+        redemptions {
+          claimedAt
+          credit {
+            grossAmount
+          }
+        }
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+"""
+
 _AGREEMENTS_QUERY = """
 fragment AgreementFields on Agreement {
   displayName
@@ -390,14 +417,23 @@ class PowershopAPIClient:
         )
         return data.get("account", {})
 
+    async def get_vouchers(self, account_number: str) -> List[Dict[str, Any]]:
+        """Return all purchased vouchers (packs) with their remaining balances."""
+        data = await self._graphql(
+            _VOUCHERS_QUERY, {"accountNumber": account_number}
+        )
+        edges = data.get("vouchersForAccount", {}).get("edges", [])
+        return [e["node"] for e in edges if e.get("node")]
+
     async def get_rate_data(
         self, account_number: str, property_id: str
     ) -> Dict[str, Any]:
         """Return a combined dict of balance + rate periods + usage for the coordinator."""
-        # Fetch account data and agreements in parallel
-        account_data, agreement_data = await asyncio.gather(
+        # Fetch account data, agreements and vouchers in parallel
+        account_data, agreement_data, voucher_nodes = await asyncio.gather(
             self.get_account_data(account_number),
             self.get_agreements(account_number, property_id),
+            self.get_vouchers(account_number),
         )
 
         raw_balance = account_data.get("balance")
@@ -458,6 +494,22 @@ class PowershopAPIClient:
                     cost_period_cents += float(amt)
         cost_period_nzd = round(cost_period_cents / 100, 2)
 
+        # Voucher totals
+        voucher_balance_nzd = round(
+            sum(float(v.get("balance") or 0) for v in voucher_nodes) / 100, 2
+        )
+        voucher_list = [
+            {
+                "id": v.get("id"),
+                "name": v.get("displayName"),
+                "available_from": v.get("availableFrom"),
+                "balance_nzd": round(float(v.get("balance") or 0) / 100, 2),
+                "original_value_nzd": round(float(v.get("voucherValue") or 0) / 100, 2),
+            }
+            for v in voucher_nodes
+            if float(v.get("balance") or 0) > 0
+        ]
+
         return {
             "balance": balance,
             "overdue_balance": overdue_balance,
@@ -469,4 +521,7 @@ class PowershopAPIClient:
             "usage_today_kwh": usage_today_kwh,
             "usage_period_kwh": usage_period_kwh,
             "cost_period_nzd": cost_period_nzd,
+            "voucher_balance_nzd": voucher_balance_nzd,
+            "voucher_list": voucher_list,
+            "voucher_count": len(voucher_list),
         }
