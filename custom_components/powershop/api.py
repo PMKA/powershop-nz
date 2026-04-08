@@ -121,7 +121,7 @@ query measurements(
 
 _VOUCHERS_QUERY = """
 query vouchersForAccount(
-  $accountNumber: String!
+  $accountNumber: ID!
   $availableBeforeDate: Date
   $availableFromDate: Date
 ) {

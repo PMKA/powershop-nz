@@ -23,7 +23,6 @@ from homeassistant.helpers.update_coordinator import (
 from .api import AuthError, PowershopAPIClient
 from .const import (
     CONF_ACCOUNT_NUMBER,
-    CONF_PROPERTY_ID,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
@@ -190,14 +189,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Powershop sensor platform."""
-    client = PowershopAPIClient(
-        refresh_token=config_entry.data[CONF_REFRESH_TOKEN]
-    )
-    coordinator = PowershopDataUpdateCoordinator(hass, client, config_entry)
-
-    hass.data[DOMAIN][f"{config_entry.entry_id}_coordinator"] = coordinator
-
-    await coordinator.async_config_entry_first_refresh()
+    coordinator: PowershopDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     async_add_entities(
         PowershopSensor(coordinator, description, config_entry)
