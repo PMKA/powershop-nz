@@ -108,7 +108,16 @@ If your session expires, Home Assistant will prompt you to re-authenticate. Simp
 
 ## 📝 Changelog
 
-### v2.3.0 (2026-04-09)
+### v2.0.3 (2026-04-09)
+- Fixed `NameError: CONF_PROPERTY_ID` causing all sensors to show unavailable after update
+- Fixed GraphQL HTTP 400 on Power Pack queries (wrong variable type `String!` vs `ID!`)
+- Fixed `ConfigEntryNotReady` being raised inside the sensor platform — coordinator setup moved to `__init__.py` as HA requires
+- Fixed `async_step_reauth` to use the entry data passed by HA (avoids potential `None` email)
+- Fixed `integration_type` from invalid `"service"` to `"hub"`
+- Removed invalid `filename` field from `hacs.json`
+- Converted `logo.png` to RGBA (was palette mode)
+
+### v2.0.2 (2026-04-09)
 - Added `Used This Billing Period` sensor — actual confirmed spend (USED in app)
 - Added `Estimated Cost This Billing Period` sensor — full projected monthly cost (EST in app)
 - Added `Still To Buy This Billing Period` sensor — pack shortfall warning
@@ -117,7 +126,7 @@ If your session expires, Home Assistant will prompt you to re-authenticate. Simp
 - Updated Power Pack query to use `availableBeforeDate`/`availableFromDate` filters matching the website's per-period breakdown
 - Daily measurements now use a dedicated date-range query that includes `readingQuality` (ACTUAL vs ESTIMATED)
 
-### v2.2.0
+### v2.0.1
 - Added usage sensors (today kWh, billing period kWh, billing period cost)
 - Added Power Pack / voucher balance sensor
 

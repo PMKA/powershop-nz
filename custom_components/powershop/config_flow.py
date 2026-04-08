@@ -1,6 +1,6 @@
 """Config flow for Powershop integration."""
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import voluptuous as vol
 
@@ -127,14 +127,10 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ------------------------------------------------------------------
 
     async def async_step_reauth(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, entry_data: Mapping[str, Any]
     ) -> FlowResult:
         """Re-authenticate an existing entry (e.g. refresh token revoked)."""
-        self._email = self.context.get("entry_id") and (
-            self.hass.config_entries.async_get_entry(
-                self.context["entry_id"]
-            ).data.get(CONF_EMAIL)
-        )
+        self._email = entry_data.get(CONF_EMAIL)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
