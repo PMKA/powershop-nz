@@ -693,9 +693,18 @@ class PowershopAPIClient:
 
         # ── Upcoming billing periods ───────────────────────────────────────
         upcoming_periods: List[Dict[str, Any]] = []
-        # Pool of currently redeemable packs that can cover upcoming periods without
-        # dedicated future packs (same approach the website uses for near-term periods).
-        remaining_pool_nzd = voucher_balance_nzd
+        # Pool of currently redeemable packs available to cover periods without
+        # dedicated future packs. Subtract dedicated packs (already counted per-period)
+        # to avoid double-counting them in the general pool.
+        total_dedicated_nzd = round(
+            sum(
+                float(v.get("voucherValue") or 0)
+                for fvouch in future_vouchers
+                for v in fvouch
+            ) / 100,
+            2,
+        )
+        remaining_pool_nzd = round(max(0.0, voucher_balance_nzd - total_dedicated_nzd), 2)
 
         for fp, fmeas, fvouch in zip(future_periods, future_meas, future_vouchers):
             fp_est_cents = sum(
