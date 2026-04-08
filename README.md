@@ -5,8 +5,8 @@
 # Powershop New Zealand — Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub Release](https://img.shields.io/github/release/PMKA/Powershop-nz-HACS.svg)](https://github.com/PMKA/Powershop-nz-HACS/releases)
-[![GitHub Activity](https://img.shields.io/github/commit-activity/y/PMKA/Powershop-nz-HACS.svg)](https://github.com/PMKA/Powershop-nz-HACS/commits/main)
+[![GitHub Release](https://img.shields.io/github/release/PMKA/powershop-nz.svg)](https://github.com/PMKA/powershop-nz/releases)
+[![GitHub Activity](https://img.shields.io/github/commit-activity/y/PMKA/powershop-nz.svg)](https://github.com/PMKA/powershop-nz/commits/main)
 
 A Home Assistant custom component for **Powershop New Zealand** customers. Monitor your account balance, electricity rates, usage, and Power Pack coverage — updated every 15 minutes.
 
@@ -34,7 +34,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 1. Open **HACS** in Home Assistant
 2. Go to **Integrations**
 3. Click the three dots (⋮) in the top right corner → **Custom repositories**
-4. Add `https://github.com/PMKA/Powershop-nz-HACS` and select **Integration**
+4. Add `https://github.com/PMKA/powershop-nz` and select **Integration**
 5. Click **Add**, then find **Powershop NZ** in the list and install it
 6. Restart Home Assistant
 
