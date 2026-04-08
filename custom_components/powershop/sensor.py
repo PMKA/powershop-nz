@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_DOLLAR
+from homeassistant.const import CURRENCY_DOLLAR, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -67,6 +67,30 @@ SENSORS = [
         native_unit_of_measurement="c/kWh",
         state_class=None,
         icon="mdi:clock",
+    ),
+    SensorEntityDescription(
+        key="usage_today",
+        name="Usage Today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:lightning-bolt",
+    ),
+    SensorEntityDescription(
+        key="usage_billing_period",
+        name="Usage This Billing Period",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:lightning-bolt-circle",
+    ),
+    SensorEntityDescription(
+        key="cost_billing_period",
+        name="Cost This Billing Period",
+        native_unit_of_measurement="NZD",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:cash",
     ),
 ]
 
@@ -181,6 +205,12 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
             return _match_rate(rate_periods, _PEAK_KEYWORDS)
         if key == "shoulder_rate":
             return _match_rate(rate_periods, _SHOULDER_KEYWORDS)
+        if key == "usage_today":
+            return data.get("usage_today_kwh")
+        if key == "usage_billing_period":
+            return data.get("usage_period_kwh")
+        if key == "cost_billing_period":
+            return data.get("cost_period_nzd")
 
         return None
 
@@ -197,6 +227,11 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
 
         if self.entity_description.key == "balance":
             attrs["next_billing_date"] = data.get("next_billing_date")
+            attrs["overdue_balance"] = data.get("overdue_balance")
+
+        if self.entity_description.key == "cost_billing_period":
+            attrs["billing_period_start"] = data.get("period_start")
+            attrs["billing_period_end"] = data.get("period_end")
 
         rate_periods = data.get("rate_periods", {})
         if self.entity_description.key in ("off_peak_rate", "peak_rate", "shoulder_rate"):

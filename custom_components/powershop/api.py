@@ -1,9 +1,10 @@
 """Powershop API client using Firebase auth and GraphQL."""
+import asyncio
 import uuid
 import logging
 import re
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
@@ -56,17 +57,60 @@ query Account($accountNumber: String!) {
   account(accountNumber: $accountNumber) {
     id
     ...AccountBalanceFragment
+    overdueBalance
     billingOptions {
       nextBillingDate
+      currentBillingPeriodStartDate
+      currentBillingPeriodEndDate
     }
-    bills(first: 1) {
-      edges {
-        node {
-          id
-          billType
-          fromDate
-          toDate
-          issuedDate
+  }
+}
+"""
+
+_MEASUREMENTS_QUERY = """
+query measurements(
+  $accountNumber: String!
+  $propertyId: ID!
+  $last: Int
+  $endOn: Date
+  $readingFrequencyType: ReadingFrequencyType!
+) {
+  account(accountNumber: $accountNumber) {
+    id
+    property(id: $propertyId) {
+      id
+      measurements(
+        last: $last
+        endOn: $endOn
+        timezone: "Pacific/Auckland"
+        utilityFilters: [{
+          electricityFilters: {
+            readingDirection: CONSUMPTION
+            readingQuality: COMBINED
+            readingFrequencyType: $readingFrequencyType
+          }
+        }]
+      ) {
+        ... on MeasurementConnection {
+          edges {
+            node {
+              value
+              readAt
+              ... on IntervalMeasurementType {
+                startAt
+                endAt
+              }
+              metaData {
+                statistics {
+                  type
+                  value
+                  costInclTax {
+                    estimatedAmount
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -305,6 +349,37 @@ class PowershopAPIClient:
         data = await self._graphql(_ACCOUNT_QUERY, {"accountNumber": account_number})
         return data.get("account", {})
 
+    async def get_measurements(
+        self,
+        account_number: str,
+        property_id: str,
+        last: int,
+        end_on: str,
+        freq: str,
+    ) -> List[Dict[str, Any]]:
+        """Return measurement nodes for the given interval.
+
+        *freq* is one of ``HOUR_INTERVAL``, ``DAY_INTERVAL``, ``MONTH_INTERVAL``.
+        """
+        data = await self._graphql(
+            _MEASUREMENTS_QUERY,
+            {
+                "accountNumber": account_number,
+                "propertyId": property_id,
+                "last": last,
+                "endOn": end_on,
+                "readingFrequencyType": freq,
+            },
+        )
+        measurements = (
+            data.get("account", {})
+            .get("property", {})
+            .get("measurements", {})
+        )
+        if isinstance(measurements, dict):
+            return [e["node"] for e in measurements.get("edges", []) if e.get("node")]
+        return []
+
     async def get_agreements(
         self, account_number: str, property_id: str
     ) -> Dict[str, Any]:
@@ -318,15 +393,21 @@ class PowershopAPIClient:
     async def get_rate_data(
         self, account_number: str, property_id: str
     ) -> Dict[str, Any]:
-        """Return a combined dict of balance + rate periods for the coordinator."""
-        account_data = await self.get_account_data(account_number)
-        agreement_data = await self.get_agreements(account_number, property_id)
+        """Return a combined dict of balance + rate periods + usage for the coordinator."""
+        # Fetch account data and agreements in parallel
+        account_data, agreement_data = await asyncio.gather(
+            self.get_account_data(account_number),
+            self.get_agreements(account_number, property_id),
+        )
 
         raw_balance = account_data.get("balance")
         balance = round(raw_balance / 100, 2) if raw_balance is not None else None
-        next_billing_date = (
-            (account_data.get("billingOptions") or {}).get("nextBillingDate")
-        )
+        raw_overdue = account_data.get("overdueBalance")
+        overdue_balance = round(raw_overdue / 100, 2) if raw_overdue is not None else None
+        billing_options = account_data.get("billingOptions") or {}
+        next_billing_date = billing_options.get("nextBillingDate")
+        period_start = billing_options.get("currentBillingPeriodStartDate")
+        period_end = billing_options.get("currentBillingPeriodEndDate")
 
         # Extract rates from the first meter point's active agreement
         rate_periods: Dict[str, Any] = {}
@@ -344,9 +425,48 @@ class PowershopAPIClient:
                 }
             break  # Only process first meter point
 
+        # Fetch measurements: today (hourly) + billing period (daily) in parallel
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        end_on = period_end or tomorrow
+
+        hourly_nodes, daily_nodes = await asyncio.gather(
+            self.get_measurements(account_number, property_id, 24, tomorrow, "HOUR_INTERVAL"),
+            self.get_measurements(account_number, property_id, 35, end_on, "DAY_INTERVAL"),
+        )
+
+        # Today's kWh: sum value of last 24 hourly readings
+        usage_today_kwh = round(
+            sum(float(n.get("value") or 0) for n in hourly_nodes), 3
+        )
+
+        # Billing period: filter daily nodes to on/after period start
+        if period_start:
+            daily_nodes = [
+                n for n in daily_nodes
+                if (n.get("readAt") or "")[:10] >= period_start
+            ]
+        usage_period_kwh = round(
+            sum(float(n.get("value") or 0) for n in daily_nodes), 3
+        )
+
+        # Billing period cost: sum all costInclTax.estimatedAmount from each day's statistics
+        cost_period_cents = 0.0
+        for node in daily_nodes:
+            for stat in (node.get("metaData") or {}).get("statistics", []):
+                amt = (stat.get("costInclTax") or {}).get("estimatedAmount")
+                if amt:
+                    cost_period_cents += float(amt)
+        cost_period_nzd = round(cost_period_cents / 100, 2)
+
         return {
             "balance": balance,
+            "overdue_balance": overdue_balance,
             "next_billing_date": next_billing_date,
+            "period_start": period_start,
+            "period_end": period_end,
             "rate_periods": rate_periods,
             "account_number": account_number,
+            "usage_today_kwh": usage_today_kwh,
+            "usage_period_kwh": usage_period_kwh,
+            "cost_period_nzd": cost_period_nzd,
         }
