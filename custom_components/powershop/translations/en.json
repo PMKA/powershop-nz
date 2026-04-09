@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Powershop – Sign In",
+        "description": "Enter the email address registered with your Powershop account. A one-time code will be sent to that address.",
+        "data": {
+          "email": "Email Address"
+        }
+      },
+      "otp": {
+        "title": "Powershop – Enter Code",
+        "description": "Enter the sign-in code sent to {email}.",
+        "data": {
+          "otp": "One-Time Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Powershop – Re-authenticate",
+        "description": "Your session for {email} has expired. Click Submit to send a new sign-in code.",
+        "data": {}
+      },
+      "reauth_otp": {
+        "title": "Powershop – Enter Code",
+        "description": "Enter the sign-in code sent to {email}.",
+        "data": {
+          "otp": "One-Time Code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Powershop. Please check your internet connection.",
+      "email_not_found": "That email address was not found on any Powershop account.",
+      "invalid_otp": "The code was incorrect or has expired. Please try again.",
+      "invalid_auth": "Authentication failed. Please restart setup.",
+      "no_accounts": "No Powershop accounts were found for this email.",
+      "unknown": "An unexpected error occurred. Please try again."
+    },
+    "abort": {
+      "already_configured": "This Powershop account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  }
+}
