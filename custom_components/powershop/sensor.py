@@ -153,6 +153,8 @@ class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         self.client = client
         self._config_entry = config_entry
+        self._measurement_fail_count: int = 0
+        self._cached_measurement_data: Dict[str, Any] = {}
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
 
     async def async_shutdown(self) -> None:
@@ -169,6 +171,29 @@ class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
             raise ConfigEntryAuthFailed(str(err)) from err
         except Exception as err:
             raise UpdateFailed(f"Error communicating with Powershop API: {err}") from err
+
+        _MEASUREMENT_KEYS = (
+            "usage_today_kwh", "usage_period_kwh", "cost_period_nzd",
+            "cost_used_nzd", "cost_estimated_nzd", "cost_still_to_buy_nzd",
+            "period_coverage_pct", "upcoming_periods",
+        )
+        if not data.get("measurement_ok", True):
+            self._measurement_fail_count += 1
+            _LOGGER.warning(
+                "Powershop measurement data unavailable (failure %d/12); using cached values",
+                self._measurement_fail_count,
+            )
+            if self._measurement_fail_count >= 12:
+                raise UpdateFailed(
+                    f"Powershop measurement data has been unavailable for "
+                    f"{self._measurement_fail_count} consecutive polls (~3 hours)"
+                )
+            data.update(self._cached_measurement_data)
+        else:
+            self._measurement_fail_count = 0
+            self._cached_measurement_data = {
+                k: data[k] for k in _MEASUREMENT_KEYS if k in data
+            }
 
         # If the refresh token was rotated, persist the new one
         if self.client.refresh_token != self._config_entry.data.get(CONF_REFRESH_TOKEN):

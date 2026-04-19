@@ -448,7 +448,7 @@ class PowershopAPIClient:
                 raise ValueError(f"GraphQL HTTP {resp.status}: {body[:500]}")
             data = await resp.json(content_type=None)
         if "errors" in data:
-            _LOGGER.error("GraphQL errors: %s", data["errors"])
+            _LOGGER.warning("GraphQL errors: %s", data["errors"])
             raise ValueError(data["errors"][0].get("message", "GraphQL error"))
         return data.get("data", {})
 
@@ -632,7 +632,12 @@ class PowershopAPIClient:
             ]
         )
 
-        results = await asyncio.gather(*coros)
+        raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        measurement_ok = not any(isinstance(r, Exception) for r in raw_results)
+        results = [
+            r if not isinstance(r, Exception) else []
+            for r in raw_results
+        ]
         n_future = len(future_periods)
         hourly_nodes: List[Dict[str, Any]] = results[0]
         daily_nodes: List[Dict[str, Any]] = results[1]
@@ -747,6 +752,7 @@ class PowershopAPIClient:
             )
 
         return {
+            "measurement_ok": measurement_ok,
             "balance": balance,
             "overdue_balance": overdue_balance,
             "next_billing_date": next_billing_date,
