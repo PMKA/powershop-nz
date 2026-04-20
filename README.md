@@ -22,7 +22,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 
 ## Requirements
 
-- A Powershop NZ account at [app.powershop.nz](https://app.powershop.nz)
+- A Powershop NZ account at [app.powershop.nz](https://app.powershop.nz) - Your account must be migrated to Powershop's new platform. You can verify this by checking if you can log in at app.powershop.nz. Powershop is rolling this out gradually and you'll get an email from them letting you know your account is being migrated — if your account hasn't been migrated yet, the integration will not work. 
 - Home Assistant 2024.1 or later
 - HACS (for managed installation)
 
@@ -89,6 +89,7 @@ Your account number and property ID are discovered automatically. Home Assistant
 ## Troubleshooting
 
 **No OTP email?** Check spam, make sure you're using the right address, and try again, i found at some times of day the emails were slow to come through.
+**"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
 ## 📝 Changelog
 
