@@ -30,8 +30,9 @@ check.py
 debug_*.py
 custom_components/__init__.py
 
-# HAR captures (browser network logs — may contain auth tokens)
+# HAR captures and data extracts (may contain auth tokens / account data)
 *.har
+extract.txt
 
 # Virtual environments
 venv/
