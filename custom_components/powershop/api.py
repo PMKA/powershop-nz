@@ -652,6 +652,18 @@ class PowershopAPIClient:
             sum(float(n.get("value") or 0) for n in daily_nodes), 3
         )
 
+        # ── Daily standing charge (first available daily node) ────────────
+        daily_charge_cents: Optional[float] = None
+        for node in daily_nodes:
+            for stat in (node.get("metaData") or {}).get("statistics", []):
+                if stat.get("type") == "STANDING_CHARGE_COST":
+                    val = (stat.get("costInclTax") or {}).get("estimatedAmount")
+                    if val is not None:
+                        daily_charge_cents = float(val)
+                    break
+            if daily_charge_cents is not None:
+                break
+
         # ── Cost split: ACTUAL (USED) vs all days including ESTIMATED (EST) ──
         cost_used_cents = 0.0
         cost_estimated_cents = 0.0
@@ -772,4 +784,5 @@ class PowershopAPIClient:
             "voucher_list": voucher_list,
             "voucher_count": len(voucher_list),
             "upcoming_periods": upcoming_periods,
+            "daily_charge_nzd": round(daily_charge_cents / 100, 4) if daily_charge_cents is not None else None,
         }

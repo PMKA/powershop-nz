@@ -131,6 +131,14 @@ SENSORS = [
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:percent",
     ),
+    SensorEntityDescription(
+        key="daily_charge",
+        name="Daily Standing Charge",
+        native_unit_of_measurement="NZD",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:calendar-today",
+    ),
 ]
 
 
@@ -175,7 +183,7 @@ class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
         _MEASUREMENT_KEYS = (
             "usage_today_kwh", "usage_period_kwh", "cost_period_nzd",
             "cost_used_nzd", "cost_estimated_nzd", "cost_still_to_buy_nzd",
-            "period_coverage_pct", "upcoming_periods",
+            "period_coverage_pct", "upcoming_periods", "daily_charge_nzd",
         )
         if not data.get("measurement_ok", True):
             self._measurement_fail_count += 1
@@ -278,6 +286,8 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
             return data.get("cost_still_to_buy_nzd")
         if key == "period_coverage_pct":
             return data.get("period_coverage_pct")
+        if key == "daily_charge":
+            return data.get("daily_charge_nzd")
 
         return None
 

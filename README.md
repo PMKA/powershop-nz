@@ -70,6 +70,7 @@ Your account number and property ID are discovered automatically. Home Assistant
 | `sensor.powershop_period_still_to_buy` | How much more in packs you'd need to cover this billing period | NZD |
 | `sensor.powershop_period_coverage_pct` | % of projected bill covered by packs already purchased | % |
 | `sensor.powershop_voucher_balance` | Total redeemable Power Pack balance | NZD |
+| `sensor.powershop_daily_standing_charge` | Daily fixed (standing/line) charge | NZD |
 
 ### Sensor Attributes
 
@@ -92,6 +93,9 @@ Your account number and property ID are discovered automatically. Home Assistant
 **"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
 ## 📝 Changelog
+
+### v2.0.8 (2026-05-01)
+- Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in c/day
 
 ### v2.0.5 (2026-04-10)
 - Updated integration icon — new transparent PNG, shown in HA integrations page and HACS store
