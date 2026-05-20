@@ -184,6 +184,7 @@ class PowershopDataUpdateCoordinator(DataUpdateCoordinator):
             "usage_today_kwh", "usage_period_kwh", "cost_period_nzd",
             "cost_used_nzd", "cost_estimated_nzd", "cost_still_to_buy_nzd",
             "period_coverage_pct", "upcoming_periods", "daily_charge_nzd",
+            "hourly_usage", "daily_usage",
         )
         if not data.get("measurement_ok", True):
             self._measurement_fail_count += 1
@@ -318,6 +319,14 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.key == "voucher_balance":
             attrs["voucher_count"] = data.get("voucher_count")
             attrs["vouchers"] = data.get("voucher_list", [])
+
+        if self.entity_description.key == "usage_today":
+            attrs["hourly_usage"] = data.get("hourly_usage", [])
+
+        if self.entity_description.key == "usage_billing_period":
+            attrs["billing_period_start"] = data.get("period_start")
+            attrs["billing_period_end"] = data.get("period_end")
+            attrs["daily_usage"] = data.get("daily_usage", [])
 
         rate_periods = data.get("rate_periods", {})
         if self.entity_description.key in ("off_peak_rate", "peak_rate", "shoulder_rate"):
