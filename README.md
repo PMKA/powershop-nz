@@ -14,10 +14,10 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 - **Account Balance** — current balance in NZD
 - **Time-of-Use Rates** — off-peak, peak, and shoulder rates in c/kWh
 - **Usage Monitoring** — today's kWh and billing period kWh
-- **Billing Gauges** — mirrors the Powershop app: used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
+- **Billing Period Costs** — used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
 - **Power Pack Tracking** — total redeemable pack balance and full pack list; upcoming 5 billing periods show estimated cost vs packs already purchased
 - **Passwordless Auth** — uses Powershop's email OTP login (no password stored)
-- **Automatic Token Refresh** — stays authenticated silently in the background
+- **Automatic Token Refresh** — stays authenticated in the background
 - **Regular Updates** — 15-minute refresh interval
 
 ## Requirements
@@ -74,6 +74,30 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ### Sensor Attributes
 
+**`sensor.powershop_usage_today`** includes an `hourly_usage` attribute — a list of hourly rows for today:
+
+```yaml
+- start_at: "2026-05-21T00:00:00+12:00"
+  end_at: "2026-05-21T01:00:00+12:00"
+  read_at: "2026-05-21T01:30:00+12:00"
+  kwh: 1.24
+  cost_incl_tax_estimated_nzd: 0.43
+```
+
+Cost values are returned directly from the Powershop API, not calculated locally from kWh × rate.
+
+**`sensor.powershop_usage_billing_period`** includes a `daily_usage` attribute — a list of daily rows for the current billing period:
+
+```yaml
+- date: "2026-05-01"
+  start_at: "2026-05-01T00:00:00+12:00"
+  end_at: "2026-05-02T00:00:00+12:00"
+  read_at: "2026-05-02T03:00:00+12:00"
+  kwh: 33.21
+  reading_quality: "ACTUAL"
+  cost_incl_tax_estimated_nzd: 11.42
+```
+
 **`sensor.powershop_period_estimated_cost`** includes an `upcoming_periods` attribute — a list of the next 5 billing periods, each containing:
 
 ```yaml
@@ -90,12 +114,17 @@ Your account number and property ID are discovered automatically. Home Assistant
 ## Troubleshooting
 
 **No OTP email?** Check spam, make sure you're using the right address, and try again, i found at some times of day the emails were slow to come through.
+
 **"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
 ## 📝 Changelog
 
+### v2.0.9 (2026-05-21)
+- Added `hourly_usage` attribute to `sensor.powershop_usage_today` — hourly kWh and cost for today
+- Added `daily_usage` attribute to `sensor.powershop_usage_billing_period` — daily kWh, cost, and reading quality for the current billing period
+
 ### v2.0.8 (2026-05-01)
-- Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in c/day
+- Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in NZD/day
 
 ### v2.0.5 (2026-04-10)
 - Updated integration icon — new transparent PNG, shown in HA integrations page and HACS store
