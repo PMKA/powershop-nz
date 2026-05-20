@@ -245,9 +245,10 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
         self.entity_description = description
         account_number = config_entry.data.get(CONF_ACCOUNT_NUMBER, "unknown")
         self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
+        self._attr_name = f"Powershop NZ {description.name}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, account_number)},
-            "name": f"Powershop Account {account_number}",
+            "name": "Powershop NZ",
             "manufacturer": "Powershop NZ",
             "model": "Customer Account",
         }

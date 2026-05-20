@@ -1,7 +1,7 @@
 {
-  "domain": "powershop",
+  "domain": "powershop_nz",
   "name": "Powershop NZ",
-  "version": "2.0.9",
+  "version": "2.1.0",
   "documentation": "https://github.com/PMKA/powershop-nz",
   "issue_tracker": "https://github.com/PMKA/powershop-nz/issues",
   "codeowners": ["@PMKA"],
