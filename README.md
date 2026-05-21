@@ -131,9 +131,11 @@ Cost values are returned directly from the Powershop API, not calculated locally
 > 1. Go to **Settings → Devices & Services**, delete the existing Powershop integration
 > 2. Re-add it (search for **"Powershop NZ"**)
 >
-> Your entity IDs (e.g. `sensor.powershop_account_xxxxx_balance`) will not change — they are based on your device name, not the integration domain.
+> Entity IDs will change to `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`).
+> Update any automations, dashboards, or scripts that reference the old IDs.
 
-- Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations
+- Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
+- Fixed entity ID generation: sensors now reliably produce `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`)
 
 ### v2.0.9 (2026-05-21)
 - Added `hourly_usage` attribute to `sensor.powershop_usage_today` — hourly kWh and cost for today
