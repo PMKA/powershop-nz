@@ -14,10 +14,10 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 - **Account Balance** — current balance in NZD
 - **Time-of-Use Rates** — off-peak, peak, and shoulder rates in c/kWh
 - **Usage Monitoring** — today's kWh and billing period kWh
-- **Billing Period Costs** — used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
+- **Billing Gauges** — mirrors the Powershop app: used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
 - **Power Pack Tracking** — total redeemable pack balance and full pack list; upcoming 5 billing periods show estimated cost vs packs already purchased
 - **Passwordless Auth** — uses Powershop's email OTP login (no password stored)
-- **Automatic Token Refresh** — stays authenticated in the background
+- **Automatic Token Refresh** — stays authenticated silently in the background
 - **Regular Updates** — 15-minute refresh interval
 
 ## Requirements
@@ -40,7 +40,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 ### Manual Installation
 
 1. Download or clone this repository
-2. Copy the `custom_components/powershop_nz/` folder into your HA config's `custom_components/` directory
+2. Copy the `custom_components/powershop/` folder into your HA config's `custom_components/` directory
 3. Restart Home Assistant
 
 ## Configuration
@@ -56,51 +56,25 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ## Sensors
 
-Entity IDs follow the pattern `sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`.
-
-| Key | Description | Unit |
-|-----|-------------|------|
-| `balance` | Current account balance | NZD |
-| `off_peak_rate` | Off-peak electricity rate | c/kWh |
-| `peak_rate` | Peak electricity rate | c/kWh |
-| `shoulder_rate` | Shoulder electricity rate | c/kWh |
-| `usage_today` | kWh consumed today (last 24 h) | kWh |
-| `usage_billing_period` | kWh consumed this billing period | kWh |
-| `cost_billing_period` | Cost for the current billing period | NZD |
-| `period_used_cost` | Actual metered spend so far this billing period | NZD |
-| `period_estimated_cost` | Projected total cost for this billing period | NZD |
-| `period_still_to_buy` | How much more in packs you'd need to cover this billing period | NZD |
-| `period_coverage_pct` | % of projected bill covered by packs already purchased | % |
-| `voucher_balance` | Total redeemable Power Pack balance | NZD |
-| `daily_charge` | Daily fixed (standing/line) charge | NZD |
+| Entity | Description | Unit |
+|--------|-------------|------|
+| `sensor.powershop_balance` | Current account balance | NZD |
+| `sensor.powershop_off_peak_rate` | Off-peak electricity rate | c/kWh |
+| `sensor.powershop_peak_rate` | Peak electricity rate | c/kWh |
+| `sensor.powershop_shoulder_rate` | Shoulder electricity rate | c/kWh |
+| `sensor.powershop_usage_today` | kWh consumed today (last 24 h) | kWh |
+| `sensor.powershop_usage_billing_period` | kWh consumed this billing period | kWh |
+| `sensor.powershop_cost_billing_period` | Cost for the current billing period | NZD |
+| `sensor.powershop_period_used_cost` | Actual metered spend so far this billing period | NZD |
+| `sensor.powershop_period_estimated_cost` | Projected total cost for this billing period | NZD |
+| `sensor.powershop_period_still_to_buy` | How much more in packs you'd need to cover this billing period | NZD |
+| `sensor.powershop_period_coverage_pct` | % of projected bill covered by packs already purchased | % |
+| `sensor.powershop_voucher_balance` | Total redeemable Power Pack balance | NZD |
+| `sensor.powershop_daily_standing_charge` | Daily fixed (standing/line) charge | NZD |
 
 ### Sensor Attributes
 
-**`usage_today`** includes an `hourly_usage` attribute — a list of hourly rows for today:
-
-```yaml
-- start_at: "2026-05-21T00:00:00+12:00"
-  end_at: "2026-05-21T01:00:00+12:00"
-  read_at: "2026-05-21T01:30:00+12:00"
-  kwh: 1.24
-  cost_incl_tax_estimated_nzd: 0.43
-```
-
-Cost values are returned directly from the Powershop API, not calculated locally from kWh × rate.
-
-**`usage_billing_period`** includes a `daily_usage` attribute — a list of daily rows for the current billing period:
-
-```yaml
-- date: "2026-05-01"
-  start_at: "2026-05-01T00:00:00+12:00"
-  end_at: "2026-05-02T00:00:00+12:00"
-  read_at: "2026-05-02T03:00:00+12:00"
-  kwh: 33.21
-  reading_quality: "ACTUAL"
-  cost_incl_tax_estimated_nzd: 11.42
-```
-
-**`period_estimated_cost`** includes an `upcoming_periods` attribute — a list of the next 5 billing periods, each containing:
+**`sensor.powershop_period_estimated_cost`** includes an `upcoming_periods` attribute — a list of the next 5 billing periods, each containing:
 
 ```yaml
 - period_start: "2026-05-06"
@@ -111,34 +85,17 @@ Cost values are returned directly from the Powershop API, not calculated locally
   coverage_pct: 0.0
 ```
 
-**`voucher_balance`** includes a `vouchers` attribute listing every active pack with its name, available-from date, remaining balance, and original value.
+**`sensor.powershop_voucher_balance`** includes a `vouchers` attribute listing every active pack with its name, available-from date, remaining balance, and original value.
 
 ## Troubleshooting
 
 **No OTP email?** Check spam, make sure you're using the right address, and try again, i found at some times of day the emails were slow to come through.
-
 **"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
 ## 📝 Changelog
 
-### v2.1.0 (2026-05-21)
-
-> ⚠️ **Breaking Change**
->
-> The integration domain has been renamed from `powershop` to `powershop_nz` to avoid future conflicts with other Powershop country integrations.
->
-> Entity IDs will automatically migrate to `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`) on the first restart after updating — no manual steps required.
-> Update any automations, dashboards, or scripts that reference the old IDs.
-
-- Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
-- Fixed entity ID generation: sensors now reliably produce `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`)
-
-### v2.0.9 (2026-05-21)
-- Added `hourly_usage` attribute to `sensor.powershop_usage_today` — hourly kWh and cost for today
-- Added `daily_usage` attribute to `sensor.powershop_usage_billing_period` — daily kWh, cost, and reading quality for the current billing period
-
 ### v2.0.8 (2026-05-01)
-- Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in NZD/day
+- Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in c/day
 
 ### v2.0.5 (2026-04-10)
 - Updated integration icon — new transparent PNG, shown in HA integrations page and HACS store

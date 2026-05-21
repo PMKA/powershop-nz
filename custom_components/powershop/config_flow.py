@@ -26,7 +26,6 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Powershop (email OTP)."""
 
     VERSION = 2
-    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         self._email: Optional[str] = None

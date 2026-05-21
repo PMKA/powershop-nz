@@ -1,6 +1,6 @@
 """Constants for Powershop integration."""
 
-DOMAIN = "powershop_nz"
+DOMAIN = "powershop"
 
 # Configuration keys
 CONF_EMAIL = "email"
