@@ -644,7 +644,7 @@ class PowershopAPIClient:
         future_meas: List[List[Dict[str, Any]]] = list(results[2: 2 + n_future])
         future_vouchers: List[List[Dict[str, Any]]] = list(results[2 + n_future:])
 
-        # ── Usage ──────────────────────────────────────────────────────────
+        # Usage
         usage_today_kwh = round(
             sum(float(n.get("value") or 0) for n in hourly_nodes), 3
         )
@@ -652,7 +652,7 @@ class PowershopAPIClient:
             sum(float(n.get("value") or 0) for n in daily_nodes), 3
         )
 
-        # ── Daily standing charge (first available daily node) ────────────
+        # Daily standing charge (first available daily node)
         daily_charge_cents: Optional[float] = None
         for node in daily_nodes:
             for stat in (node.get("metaData") or {}).get("statistics", []):
@@ -664,7 +664,7 @@ class PowershopAPIClient:
             if daily_charge_cents is not None:
                 break
 
-        # ── Cost split: ACTUAL (USED) vs all days including ESTIMATED (EST) ──
+        # Cost split: ACTUAL (USED) vs all days including ESTIMATED (EST)
         cost_used_cents = 0.0
         cost_estimated_cents = 0.0
         for node in daily_nodes:
@@ -681,7 +681,7 @@ class PowershopAPIClient:
         cost_used_nzd = round(cost_used_cents / 100, 2)
         cost_estimated_nzd = round(cost_estimated_cents / 100, 2)
 
-        # ── Voucher totals (all currently redeemable packs) ────────────────
+        # Voucher totals (all currently redeemable packs)
         voucher_balance_nzd = round(
             sum(float(v.get("balance") or 0) for v in voucher_nodes) / 100, 2
         )
@@ -697,7 +697,7 @@ class PowershopAPIClient:
             if float(v.get("balance") or 0) > 0
         ]
 
-        # ── Gauge calculations: current period ─────────────────────────────
+        # Gauge calculations: current period
         cost_still_to_buy_nzd = round(
             max(0.0, cost_estimated_nzd - voucher_balance_nzd), 2
         )
@@ -708,7 +708,7 @@ class PowershopAPIClient:
             1,
         )
 
-        # ── Upcoming billing periods ───────────────────────────────────────
+        # Upcoming billing periods
         upcoming_periods: List[Dict[str, Any]] = []
         # Pool of currently redeemable packs available to cover future periods.
         # Subtract dedicated future packs (counted per-period to avoid double-counting)
@@ -763,6 +763,45 @@ class PowershopAPIClient:
                 }
             )
 
+        # Hourly usage attribute
+        hourly_usage = [
+            {
+                "start_at": n.get("startAt"),
+                "end_at": n.get("endAt"),
+                "read_at": n.get("readAt"),
+                "kwh": round(float(n.get("value") or 0), 4),
+                "cost_incl_tax_estimated_nzd": round(
+                    sum(
+                        float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
+                        for s in (n.get("metaData") or {}).get("statistics", [])
+                        if s.get("type") == "CONSUMPTION_COST"
+                    ) / 100,
+                    4,
+                ),
+            }
+            for n in hourly_nodes
+        ]
+
+        # Daily usage attribute
+        daily_usage = [
+            {
+                "date": n.get("startAt", "")[:10] if n.get("startAt") else None,
+                "start_at": n.get("startAt"),
+                "end_at": n.get("endAt"),
+                "read_at": n.get("readAt"),
+                "kwh": round(float(n.get("value") or 0), 4),
+                "reading_quality": (n.get("metaData") or {}).get("utilityFilters", {}).get("readingQuality"),
+                "cost_incl_tax_estimated_nzd": round(
+                    sum(
+                        float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
+                        for s in (n.get("metaData") or {}).get("statistics", [])
+                    ) / 100,
+                    4,
+                ),
+            }
+            for n in daily_nodes
+        ]
+
         return {
             "measurement_ok": measurement_ok,
             "balance": balance,
@@ -785,4 +824,6 @@ class PowershopAPIClient:
             "voucher_count": len(voucher_list),
             "upcoming_periods": upcoming_periods,
             "daily_charge_nzd": round(daily_charge_cents / 100, 4) if daily_charge_cents is not None else None,
+            "hourly_usage": hourly_usage,
+            "daily_usage": daily_usage,
         }
