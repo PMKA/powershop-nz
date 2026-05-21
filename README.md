@@ -123,15 +123,11 @@ Cost values are returned directly from the Powershop API, not calculated locally
 
 ### v2.1.0 (2026-05-21)
 
-> ⚠️ **Breaking Change — Action Required**
+> ⚠️ **Breaking Change**
 >
 > The integration domain has been renamed from `powershop` to `powershop_nz` to avoid future conflicts with other Powershop country integrations.
 >
-> **After updating you must:**
-> 1. Go to **Settings → Devices & Services**, delete the existing Powershop integration
-> 2. Re-add it (search for **"Powershop NZ"**)
->
-> Entity IDs will change to `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`).
+> Entity IDs will automatically migrate to `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`) on the first restart after updating — no manual steps required.
 > Update any automations, dashboards, or scripts that reference the old IDs.
 
 - Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
