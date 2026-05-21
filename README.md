@@ -94,6 +94,29 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ## 📝 Changelog
 
+### v2.1.0 (2026-05-21)
+
+> ⚠️ **Breaking Change — Manual Reinstall Required**
+>
+> The integration domain has been renamed from `powershop` to `powershop_nz`. Because the folder was renamed, **HACS cannot update in-place** — you'll need to reinstall:
+>
+> 1. Go to **Settings → Devices & Services**, delete the existing Powershop integration
+> 2. In **HACS**, remove the existing Powershop integration
+> 3. Restart Home Assistant *(may not be strictly necessary, but recommended)*
+> 4. In **HACS**, install Powershop NZ fresh
+> 5. Restart Home Assistant
+> 6. Go to **Settings → Devices & Services → Add Integration** and set up Powershop NZ
+>
+> Your sensors will be created fresh with the correct entity IDs (`sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`).
+> Update any automations, dashboards, or scripts that reference the old IDs.
+
+- Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
+- Fixed entity ID generation: sensors now reliably produce `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`)
+
+### v2.0.9 (2026-05-21)
+- Added `hourly_usage` attribute to `sensor.powershop_usage_today` — hourly kWh and cost for today
+- Added `daily_usage` attribute to `sensor.powershop_usage_billing_period` — daily kWh, cost, and reading quality for the current billing period
+
 ### v2.0.8 (2026-05-01)
 - Added `Daily Standing Charge` sensor — exposes the daily fixed/line charge in c/day
 
