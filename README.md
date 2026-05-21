@@ -123,11 +123,18 @@ Cost values are returned directly from the Powershop API, not calculated locally
 
 ### v2.1.0 (2026-05-21)
 
-> ⚠️ **Breaking Change**
+> ⚠️ **Breaking Change — Manual Reinstall Required**
 >
-> The integration domain has been renamed from `powershop` to `powershop_nz` to avoid future conflicts with other Powershop country integrations.
+> The integration domain has been renamed from `powershop` to `powershop_nz`. Because the folder was renamed, **HACS cannot update in-place** — you'll need to reinstall:
 >
-> Entity IDs will automatically migrate to `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`) on the first restart after updating — no manual steps required.
+> 1. Go to **Settings → Devices & Services**, delete the existing Powershop integration
+> 2. In **HACS**, remove the existing Powershop integration
+> 3. Restart Home Assistant *(may not be strictly necessary, but recommended)*
+> 4. In **HACS**, install Powershop NZ fresh
+> 5. Restart Home Assistant
+> 6. Go to **Settings → Devices & Services → Add Integration** and set up Powershop NZ
+>
+> Your sensors will be created fresh with the correct entity IDs (`sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`).
 > Update any automations, dashboards, or scripts that reference the old IDs.
 
 - Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
