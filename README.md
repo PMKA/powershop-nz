@@ -14,10 +14,10 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 - **Account Balance** — current balance in NZD
 - **Time-of-Use Rates** — off-peak, peak, and shoulder rates in c/kWh
 - **Usage Monitoring** — today's kWh and billing period kWh
-- **Billing Gauges** — mirrors the Powershop app: used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
+- **Billing Period Sensors** — mirrors the Powershop app: used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
 - **Power Pack Tracking** — total redeemable pack balance and full pack list; upcoming 5 billing periods show estimated cost vs packs already purchased
 - **Passwordless Auth** — uses Powershop's email OTP login (no password stored)
-- **Automatic Token Refresh** — stays authenticated silently in the background
+- **Automatic Token Refresh** — stays authenticated in the background
 - **Regular Updates** — 15-minute refresh interval
 
 ## Requirements
@@ -32,7 +32,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 
 1. Open **HACS** in Home Assistant
 2. Go to **Integrations**
-3. Click the three dots (⋮) in the top right corner → **Custom repositories**
+3. Click the three dots (⋮) in the top right corner and select **Custom repositories**
 4. Add `https://github.com/PMKA/powershop-nz` and select **Integration**
 5. Click **Add**, then find **Powershop NZ** in the list and install it
 6. Restart Home Assistant
@@ -47,7 +47,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 
 Authentication uses a one-time password (OTP) sent to your email — no password required:
 
-1. Go to **Settings → Devices & Services → Add Integration**
+1. Go to **Settings**, then **Devices & Services**, then **Add Integration**
 2. Search for **Powershop**
 3. Enter your Powershop account email address and click **Submit**
 4. Check your email for the one-time code and enter it, then click **Submit**
@@ -98,19 +98,29 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 > ⚠️ **Breaking Change — Manual Reinstall Required**
 >
-> The integration domain has been renamed from `powershop` to `powershop_nz`. Because the folder was renamed, **HACS cannot update in-place** — you'll need to reinstall:
+> The integration domain has been renamed from `powershop` to `powershop_nz`. **The HACS automatic update will fail** with the following error — this is expected:
 >
-> 1. Go to **Settings → Devices & Services**, delete the existing Powershop integration
-> 2. In **HACS**, remove the existing Powershop integration
-> 3. Restart Home Assistant *(may not be strictly necessary, but recommended)*
-> 4. In **HACS**, install Powershop NZ fresh
-> 5. Restart Home Assistant
-> 6. Go to **Settings → Devices & Services → Add Integration** and set up Powershop NZ
+> ```
+> Downloading PMKA/powershop-nz with version v2.1.0 failed with:
+> No manifest.json file found 'custom_components/powershop/manifest.json'
+> ```
+>
+> You need to manually reinstall instead:
+>
+> 1. In **HACS**, remove the existing Powershop NZ integration
+> 2. **Restart Home Assistant** (this is required — it clears the HACS domain cache)
+> 3. In **HACS**, add `https://github.com/PMKA/powershop-nz` back as a custom repository
+> 4. Install **Powershop NZ** from HACS (it will now install to the correct folder)
+> 5. **Restart Home Assistant**
+> 6. Go to **Settings**, then **Devices & Services**, and delete the old Powershop integration
+> 7. Go to **Settings**, then **Devices & Services**, then **Add Integration** and set up Powershop NZ once more
 >
 > Your sensors will be created fresh with the correct entity IDs (`sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`).
 > Update any automations, dashboards, or scripts that reference the old IDs.
+>
+> Sorry for the hassle — the install base is still small so this felt like the right time to get the naming sorted properly rather than leaving it as `powershop` and casuing confusion. It makes the integration easier to maintain and opens up submitting the icon to the official HA brands repo, so it's worth it in the long run. This is a one-time thing — future updates will install normally through HACS.
 
-- Renamed integration domain from `powershop` → `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
+- Renamed integration domain from `powershop` to `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
 - Fixed entity ID generation: sensors now reliably produce `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`)
 
 ### v2.0.9 (2026-05-21)
