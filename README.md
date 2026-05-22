@@ -94,7 +94,7 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ## 📝 Changelog
 
-### v2.1.0 (2026-05-21)
+### v2.1.1 (2026-05-22)
 
 > ⚠️ **Breaking Change — Manual Reinstall Required**
 >
