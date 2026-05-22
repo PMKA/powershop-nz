@@ -118,7 +118,7 @@ Your account number and property ID are discovered automatically. Home Assistant
 > Your sensors will be created fresh with the correct entity IDs (`sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`).
 > Update any automations, dashboards, or scripts that reference the old IDs.
 >
-> Sorry for the hassle — the install base is still small so this felt like the right time to get the naming sorted properly rather than leaving it as `powershop` and casuing confusion. It makes the integration easier to maintain and opens up submitting the icon to the official HA brands repo, so it's worth it in the long run. This is a one-time thing — future updates will install normally through HACS.
+> Sorry for the hassle — the install base is still small so this felt like the right time to get the naming sorted properly rather than leaving it as `powershop` forever. It makes the integration easier to maintain and opens up submitting the icon to the official HA brands repo, so it's worth it in the long run. This is a one-time thing — future updates will install normally through HACS.
 
 - Renamed integration domain from `powershop` to `powershop_nz` to prevent future conflicts with other Powershop country integrations — this will also allow the icon to be submitted to the HA brands repo 🥳
 - Fixed entity ID generation: sensors now reliably produce `sensor.powershop_nz_{key}` (e.g. `sensor.powershop_nz_balance`)
