@@ -107,13 +107,13 @@ Your account number and property ID are discovered automatically. Home Assistant
 >
 > You need to manually reinstall instead:
 >
-> 1. In **HACS**, remove the existing Powershop NZ integration
-> 2. **Restart Home Assistant** (this is required — it clears the HACS domain cache)
-> 3. In **HACS**, add `https://github.com/PMKA/powershop-nz` back as a custom repository
-> 4. Install **Powershop NZ** from HACS (it will now install to the correct folder)
-> 5. **Restart Home Assistant**
-> 6. Go to **Settings**, then **Devices & Services**, and delete the old Powershop integration
-> 7. Go to **Settings**, then **Devices & Services**, then **Add Integration** and set up Powershop NZ once more
+> 1. Go to **Settings**, then **Devices & Services**, and delete the existing Powershop integration
+> 2. In **HACS**, remove the Powershop NZ integration
+> 3. **Restart Home Assistant** (this is required — it clears the HACS domain cache)
+> 4. In **HACS**, add `https://github.com/PMKA/powershop-nz` back as a custom repository
+> 5. Install **Powershop NZ** from HACS (it will now install to the correct folder)
+> 6. **Restart Home Assistant**
+> 7. Go to **Settings**, then **Devices & Services**, then **Add Integration** and set up Powershop NZ
 >
 > Your sensors will be created fresh with the correct entity IDs (`sensor.powershop_nz_{key}`, e.g. `sensor.powershop_nz_balance`).
 > Update any automations, dashboards, or scripts that reference the old IDs.
