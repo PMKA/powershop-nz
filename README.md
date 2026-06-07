@@ -94,6 +94,11 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ## 📝 Changelog
 
+### v2.1.2 (2026-06-07)
+- Fixed `sensor.powershop_nz_usage_today` returning tomorrow's 24 estimated hourly entries instead of today's — the Powershop API treats `endOn` as inclusive, so the query now uses the Auckland-local current date rather than tomorrow
+- `hourly_usage` entries now include `reading_quality` (e.g. `ESTIMATE`), matching the field already available on `daily_usage`
+- Thanks @gromitn for the bug report and fix!
+
 ### v2.1.1 (2026-05-22)
 
 > ⚠️ **Breaking Change — Manual Reinstall Required**

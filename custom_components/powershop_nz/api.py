@@ -779,7 +779,7 @@ class PowershopAPIClient:
                 "end_at": n.get("endAt"),
                 "read_at": n.get("readAt"),
                 "kwh": round(float(n.get("value") or 0), 4),
-                "reading_quality": (n.get("metaData") or {}).get("utilityFilters", {}).get("readingQuality"),
+                "reading_quality": ((n.get("metaData") or {}).get("utilityFilters") or {}).get("readingQuality"),
                 "cost_incl_tax_estimated_nzd": round(
                     sum(
                         float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
@@ -800,7 +800,7 @@ class PowershopAPIClient:
                 "end_at": n.get("endAt"),
                 "read_at": n.get("readAt"),
                 "kwh": round(float(n.get("value") or 0), 4),
-                "reading_quality": (n.get("metaData") or {}).get("utilityFilters", {}).get("readingQuality"),
+                "reading_quality": ((n.get("metaData") or {}).get("utilityFilters") or {}).get("readingQuality"),
                 "cost_incl_tax_estimated_nzd": round(
                     sum(
                         float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
