@@ -5,6 +5,7 @@ import logging
 import re
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -102,6 +103,11 @@ query measurements(
                 endAt
               }
               metaData {
+                utilityFilters {
+                  ... on ElectricityFiltersOutput {
+                    readingQuality
+                  }
+                }
                 statistics {
                   type
                   value
@@ -602,17 +608,20 @@ class PowershopAPIClient:
             else []
         )
 
-        # Fetch all measurements + future period vouchers concurrently
-        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        # Fetch all measurements + future period vouchers concurrently.
+        # The Powershop API treats endOn as inclusive, so use the Auckland-local
+        # current date for today's 24 hourly rows.
+        local_today = datetime.now(ZoneInfo("Pacific/Auckland")).date()
+        today = local_today.isoformat()
         coros = (
             [
-                # hourly today (uses last/endOn — existing query, no readingQuality needed)
-                self.get_measurements(account_number, property_id, 24, tomorrow, "HOUR_INTERVAL"),
+                # hourly today (uses last/endOn; endOn is inclusive)
+                self.get_measurements(account_number, property_id, 24, today, "HOUR_INTERVAL"),
                 # current billing period daily (with readingQuality for USED/EST split)
                 self.get_measurements_date_range(
                     account_number, property_id,
-                    period_start or (date.today() - timedelta(days=30)).isoformat(),
-                    period_end or date.today().isoformat(),
+                    period_start or (local_today - timedelta(days=30)).isoformat(),
+                    period_end or today,
                 ),
             ]
             + [
@@ -770,6 +779,7 @@ class PowershopAPIClient:
                 "end_at": n.get("endAt"),
                 "read_at": n.get("readAt"),
                 "kwh": round(float(n.get("value") or 0), 4),
+                "reading_quality": (n.get("metaData") or {}).get("utilityFilters", {}).get("readingQuality"),
                 "cost_incl_tax_estimated_nzd": round(
                     sum(
                         float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
