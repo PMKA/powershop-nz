@@ -275,6 +275,35 @@ def _parse_rate(formatted: str) -> Optional[float]:
     return float(match.group(1)) if match else None
 
 
+def normalise_hourly_usage(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return Home Assistant-friendly hourly usage rows."""
+    return [
+        {
+            "start_at": node.get("startAt"),
+            "end_at": node.get("endAt"),
+            "read_at": node.get("readAt"),
+            "kwh": round(float(node.get("value") or 0), 4),
+            "reading_quality": (
+                ((node.get("metaData") or {}).get("utilityFilters") or {}).get(
+                    "readingQuality"
+                )
+            ),
+            "cost_incl_tax_estimated_nzd": round(
+                sum(
+                    float(
+                        (stat.get("costInclTax") or {}).get("estimatedAmount") or 0
+                    )
+                    for stat in (node.get("metaData") or {}).get("statistics", [])
+                    if stat.get("type") == "CONSUMPTION_COST"
+                )
+                / 100,
+                4,
+            ),
+        }
+        for node in nodes
+    ]
+
+
 def _next_billing_periods(
     period_start: str, period_end: str, count: int = 5
 ) -> List[Dict[str, str]]:
@@ -773,24 +802,7 @@ class PowershopAPIClient:
             )
 
         # Hourly usage attribute
-        hourly_usage = [
-            {
-                "start_at": n.get("startAt"),
-                "end_at": n.get("endAt"),
-                "read_at": n.get("readAt"),
-                "kwh": round(float(n.get("value") or 0), 4),
-                "reading_quality": ((n.get("metaData") or {}).get("utilityFilters") or {}).get("readingQuality"),
-                "cost_incl_tax_estimated_nzd": round(
-                    sum(
-                        float((s.get("costInclTax") or {}).get("estimatedAmount") or 0)
-                        for s in (n.get("metaData") or {}).get("statistics", [])
-                        if s.get("type") == "CONSUMPTION_COST"
-                    ) / 100,
-                    4,
-                ),
-            }
-            for n in hourly_nodes
-        ]
+        hourly_usage = normalise_hourly_usage(hourly_nodes)
 
         # Daily usage attribute
         daily_usage = [
