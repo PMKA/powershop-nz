@@ -1,0 +1,7 @@
+get_hourly_usage:
+  fields:
+    date:
+      required: true
+      example: "2026-06-07"
+      selector:
+        date:

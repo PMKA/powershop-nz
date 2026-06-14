@@ -40,5 +40,17 @@
       "already_configured": "This Powershop account is already configured.",
       "reauth_successful": "Re-authentication was successful."
     }
+  },
+  "services": {
+    "get_hourly_usage": {
+      "name": "Get hourly usage",
+      "description": "Fetch hourly electricity usage and Powershop-provided estimated cost data for a selected date.",
+      "fields": {
+        "date": {
+          "name": "Date",
+          "description": "The date to retrieve hourly usage for."
+        }
+      }
+    }
   }
 }

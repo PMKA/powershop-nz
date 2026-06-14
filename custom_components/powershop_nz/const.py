@@ -8,6 +8,11 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_ACCOUNT_NUMBER = "account_number"
 CONF_PROPERTY_ID = "property_id"
 
+# Service action names and fields
+SERVICE_GET_HOURLY_USAGE = "get_hourly_usage"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_DATE = "date"
+
 # Production Firebase config — Powershop's own public project identifier.
 #
 # NOTE: This is NOT a secret credential.
