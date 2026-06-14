@@ -142,10 +142,17 @@ SENSORS = [
 ]
 
 
-def _match_rate(rate_periods: Dict[str, Any], keywords: set) -> Optional[float]:
+def _match_rate(
+    rate_periods: Dict[str, Any],
+    keywords: set,
+    exclude_keywords: Optional[set] = None,
+) -> Optional[float]:
     """Return the first rate whose label contains any of *keywords*."""
     for label, data in rate_periods.items():
-        if any(kw in label.lower() for kw in keywords):
+        label_lower = label.lower()
+        if exclude_keywords and any(kw in label_lower for kw in exclude_keywords):
+            continue
+        if any(kw in label_lower for kw in keywords):
             return data.get("rate")
     return None
 
@@ -270,7 +277,7 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
         if key == "off_peak_rate":
             return _match_rate(rate_periods, _OFF_PEAK_KEYWORDS)
         if key == "peak_rate":
-            return _match_rate(rate_periods, _PEAK_KEYWORDS)
+            return _match_rate(rate_periods, _PEAK_KEYWORDS, exclude_keywords=_OFF_PEAK_KEYWORDS)
         if key == "shoulder_rate":
             return _match_rate(rate_periods, _SHOULDER_KEYWORDS)
         if key == "usage_today":

@@ -5,3 +5,9 @@ get_hourly_usage:
       example: "2026-06-07"
       selector:
         date:
+    config_entry_id:
+      required: false
+      example: "abc123"
+      selector:
+        config_entry:
+          integration: powershop_nz
