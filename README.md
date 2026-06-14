@@ -58,23 +58,23 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 | Entity | Description | Unit |
 |--------|-------------|------|
-| `sensor.powershop_balance` | Current account balance | NZD |
-| `sensor.powershop_off_peak_rate` | Off-peak electricity rate | c/kWh |
-| `sensor.powershop_peak_rate` | Peak electricity rate | c/kWh |
-| `sensor.powershop_shoulder_rate` | Shoulder electricity rate | c/kWh |
-| `sensor.powershop_usage_today` | kWh consumed today (last 24 h) | kWh |
-| `sensor.powershop_usage_billing_period` | kWh consumed this billing period | kWh |
-| `sensor.powershop_cost_billing_period` | Cost for the current billing period | NZD |
-| `sensor.powershop_period_used_cost` | Actual metered spend so far this billing period | NZD |
-| `sensor.powershop_period_estimated_cost` | Projected total cost for this billing period | NZD |
-| `sensor.powershop_period_still_to_buy` | How much more in packs you'd need to cover this billing period | NZD |
-| `sensor.powershop_period_coverage_pct` | % of projected bill covered by packs already purchased | % |
-| `sensor.powershop_voucher_balance` | Total redeemable Power Pack balance | NZD |
-| `sensor.powershop_daily_standing_charge` | Daily fixed (standing/line) charge | NZD |
+| `sensor.powershop_nz_balance` | Current account balance | NZD |
+| `sensor.powershop_nz_off_peak_rate` | Off-peak electricity rate | c/kWh |
+| `sensor.powershop_nz_peak_rate` | Peak electricity rate | c/kWh |
+| `sensor.powershop_nz_shoulder_rate` | Shoulder electricity rate | c/kWh |
+| `sensor.powershop_nz_usage_today` | kWh consumed today (last 24 h) | kWh |
+| `sensor.powershop_nz_usage_billing_period` | kWh consumed this billing period | kWh |
+| `sensor.powershop_nz_cost_billing_period` | Cost for the current billing period | NZD |
+| `sensor.powershop_nz_period_used_cost` | Actual metered spend so far this billing period | NZD |
+| `sensor.powershop_nz_period_estimated_cost` | Projected total cost for this billing period | NZD |
+| `sensor.powershop_nz_period_still_to_buy` | How much more in packs you'd need to cover this billing period | NZD |
+| `sensor.powershop_nz_period_coverage_pct` | % of projected bill covered by packs already purchased | % |
+| `sensor.powershop_nz_voucher_balance` | Total redeemable Power Pack balance | NZD |
+| `sensor.powershop_nz_daily_charge` | Daily fixed (standing/line) charge | NZD |
 
 ### Sensor Attributes
 
-**`sensor.powershop_period_estimated_cost`** includes an `upcoming_periods` attribute — a list of the next 5 billing periods, each containing:
+**`sensor.powershop_nz_period_estimated_cost`** includes an `upcoming_periods` attribute — a list of the next 5 billing periods, each containing:
 
 ```yaml
 - period_start: "2026-05-06"
@@ -85,7 +85,7 @@ Your account number and property ID are discovered automatically. Home Assistant
   coverage_pct: 0.0
 ```
 
-**`sensor.powershop_voucher_balance`** includes a `vouchers` attribute listing every active pack with its name, available-from date, remaining balance, and original value.
+**`sensor.powershop_nz_voucher_balance`** includes a `vouchers` attribute listing every active pack with its name, available-from date, remaining balance, and original value.
 
 ## Troubleshooting
 
@@ -93,6 +93,11 @@ Your account number and property ID are discovered automatically. Home Assistant
 **"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
 ## 📝 Changelog
+
+### v2.1.3 (2026-06-14)
+- Fixed `sensor.powershop_nz_peak_rate` returning the Off Peak rate value instead of the true Peak rate — rate label matching was doing a substring check so `"peak"` matched `"Off Peak"` first
+- Added `powershop_nz.get_hourly_usage` service action — fetch 24 hourly usage entries for any selected date, useful for historical data without polluting sensor attributes. Thanks @gromitn!
+- Added missing `config_entry_id` field to `services.yaml` so it appears in the HA UI for users with multiple config entries
 
 ### v2.1.2 (2026-06-07)
 - Fixed `sensor.powershop_nz_usage_today` returning tomorrow's 24 estimated hourly entries instead of today's — the Powershop API treats `endOn` as inclusive, so the query now uses the Auckland-local current date rather than tomorrow
