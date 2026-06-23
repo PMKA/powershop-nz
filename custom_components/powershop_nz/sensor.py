@@ -135,8 +135,7 @@ SENSORS = [
         key="daily_charge",
         name="Daily Standing Charge",
         native_unit_of_measurement="NZD",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=None,
         icon="mdi:calendar-today",
     ),
 ]
