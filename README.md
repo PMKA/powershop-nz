@@ -94,6 +94,9 @@ Your account number and property ID are discovered automatically. Home Assistant
 
 ## 📝 Changelog
 
+### v2.1.4 (2026-06-23)
+- Fixed `sensor.powershop_nz_daily_charge` logging a HA validation warning on startup — the sensor was incorrectly using `state_class=MEASUREMENT` with `device_class=MONETARY`, which HA does not allow. The daily standing charge is a fixed tariff rate, not an accumulating total, so it now uses `state_class=None` with no device class — matching the pattern of the other rate sensors
+
 ### v2.1.3 (2026-06-14)
 - Fixed `sensor.powershop_nz_peak_rate` returning the Off Peak rate value instead of the true Peak rate — rate label matching was doing a substring check so `"peak"` matched `"Off Peak"` first
 - Added `powershop_nz.get_hourly_usage` service action — fetch 24 hourly usage entries for any selected date, useful for historical data without polluting sensor attributes. Thanks @gromitn!
