@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_DOLLAR, UnitOfEnergy
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -27,6 +27,7 @@ from .const import (
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
+from .rates import active_times, consumption_rates
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -237,6 +238,34 @@ async def async_setup_entry(
         for description in SENSORS
     )
 
+    # Rate bands differ by network and plan, so add one sensor per band found, including any that
+    # appear on a later poll.
+    added: set = set()
+
+    @callback
+    def _add_new_rate_sensors() -> None:
+        if not coordinator.data:
+            return
+        new = [
+            key for key in consumption_rates(coordinator.data.get("rate_periods", {}))
+            if key not in added
+        ]
+        if new:
+            added.update(new)
+            async_add_entities(PowershopRateSensor(coordinator, config_entry, key) for key in new)
+
+    _add_new_rate_sensors()
+    config_entry.async_on_unload(coordinator.async_add_listener(_add_new_rate_sensors))
+
+
+def _device_info(account_number: str) -> Dict[str, Any]:
+    return {
+        "identifiers": {(DOMAIN, account_number)},
+        "name": "Powershop NZ",
+        "manufacturer": "Powershop NZ",
+        "model": "Customer Account",
+    }
+
 
 class PowershopSensor(CoordinatorEntity, SensorEntity):
     """A sensor that reads from the Powershop coordinator."""
@@ -253,12 +282,7 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
         self._attr_name = f"Powershop NZ {description.name}"
         self.entity_id = f"sensor.{DOMAIN}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, account_number)},
-            "name": "Powershop NZ",
-            "manufacturer": "Powershop NZ",
-            "model": "Customer Account",
-        }
+        self._attr_device_info = _device_info(account_number)
 
     @property
     def native_value(self) -> Any:
@@ -343,3 +367,53 @@ class PowershopSensor(CoordinatorEntity, SensorEntity):
             }
 
         return attrs
+
+
+class PowershopRateSensor(CoordinatorEntity, SensorEntity):
+    """Price of one rate band (Night, Off Peak, Peak, ...)."""
+
+    _attr_native_unit_of_measurement = "c/kWh"
+    _attr_icon = "mdi:cash-clock"
+
+    def __init__(
+        self,
+        coordinator: PowershopDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        key: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._key = key
+        account_number = config_entry.data.get(CONF_ACCOUNT_NUMBER, "unknown")
+        band = self._band() or {}
+        self._attr_unique_id = f"{DOMAIN}_{account_number}_{key}"
+        self._attr_name = f"Powershop NZ {band.get('name', key)} Rate"
+        self.entity_id = f"sensor.{DOMAIN}_{key}"
+        self._attr_device_info = _device_info(account_number)
+
+    def _band(self) -> Optional[Dict[str, Any]]:
+        data = self.coordinator.data or {}
+        return consumption_rates(data.get("rate_periods", {})).get(self._key)
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._band() is not None
+
+    @property
+    def native_value(self) -> Optional[float]:
+        band = self._band()
+        return band.get("rate") if band else None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        band = self._band()
+        if not band:
+            return {}
+        return {
+            "band": band.get("name"),
+            "active_times": active_times(
+                (self.coordinator.data or {}).get("tou_schemes", []), band.get("tou_bucket")
+            ),
+            "rate_incl_gst": band.get("rate_formatted"),
+            "rate_excl_gst": band.get("rate_excl_tax"),
+            "has_discount": band.get("has_discount", False),
+        }

@@ -229,6 +229,18 @@ fragment AgreementFields on Agreement {
     hasDiscount
     formattedRateExcludingTax
     formattedRateIncludingTax
+    bandCategory
+    touBucketName
+  }
+  timeOfUseSchemes {
+    name
+    timeslots {
+      timeslot
+      activeFrom
+      activeTo
+      weekdays
+      weekends
+    }
   }
 }
 
@@ -616,6 +628,7 @@ class PowershopAPIClient:
 
         # Extract rates from the first meter point's active agreement
         rate_periods: Dict[str, Any] = {}
+        tou_schemes: List[Dict[str, Any]] = []
         property_node = agreement_data.get("property", {})
         for mp in property_node.get("meterPoints", []):
             agreement = mp.get("activeAgreement") or {}
@@ -627,7 +640,11 @@ class PowershopAPIClient:
                     "rate_formatted": rate.get("formattedRateIncludingTax"),
                     "rate_excl_tax": rate.get("formattedRateExcludingTax"),
                     "has_discount": rate.get("hasDiscount", False),
+                    "band_category": rate.get("bandCategory"),
+                    "tou_bucket": rate.get("touBucketName"),
                 }
+            tou_schemes = agreement.get("timeOfUseSchemes") or []
+            _LOGGER.debug("Active agreement: %s", agreement)
             break  # Only process first meter point
 
         # Compute upcoming billing period date ranges (next 5 months)
@@ -832,6 +849,7 @@ class PowershopAPIClient:
             "period_start": period_start,
             "period_end": period_end,
             "rate_periods": rate_periods,
+            "tou_schemes": tou_schemes,
             "account_number": account_number,
             "usage_today_kwh": usage_today_kwh,
             "usage_period_kwh": usage_period_kwh,
