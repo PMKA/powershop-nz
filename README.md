@@ -12,7 +12,7 @@ A Home Assistant custom component for **Powershop New Zealand** customers. Monit
 ## Features
 
 - **Account Balance** — current balance in NZD
-- **Time-of-Use Rates** — off-peak, peak, and shoulder rates in c/kWh
+- **Time-of-Use Rates** — a sensor for every rate on your plan (e.g. Night, Off Peak, Peak, Controlled), including the times each one applies
 - **Usage Monitoring** — today's kWh and billing period kWh
 - **Billing Period Sensors** — mirrors the Powershop app: used cost, estimated total, pack coverage %, and still-to-buy shortfall for the current period
 - **Power Pack Tracking** — total redeemable pack balance and full pack list; upcoming 5 billing periods show estimated cost vs packs already purchased
@@ -59,9 +59,10 @@ Your account number and property ID are discovered automatically. Home Assistant
 | Entity | Description | Unit |
 |--------|-------------|------|
 | `sensor.powershop_nz_balance` | Current account balance | NZD |
-| `sensor.powershop_nz_off_peak_rate` | Off-peak electricity rate | c/kWh |
-| `sensor.powershop_nz_peak_rate` | Peak electricity rate | c/kWh |
-| `sensor.powershop_nz_shoulder_rate` | Shoulder electricity rate | c/kWh |
+| `sensor.powershop_nz_rate_<band>` | One per rate on your plan, e.g. `rate_night`, `rate_off_peak`, `rate_peak`, `rate_controlled` | c/kWh |
+| `sensor.powershop_nz_off_peak_rate` | Deprecated, see [the old rate sensors](#the-old-rate-sensors) | c/kWh |
+| `sensor.powershop_nz_peak_rate` | Deprecated | c/kWh |
+| `sensor.powershop_nz_shoulder_rate` | Deprecated | c/kWh |
 | `sensor.powershop_nz_usage_today` | kWh consumed today (last 24 h) | kWh |
 | `sensor.powershop_nz_usage_billing_period` | kWh consumed this billing period | kWh |
 | `sensor.powershop_nz_cost_billing_period` | Cost for the current billing period | NZD |
@@ -71,6 +72,26 @@ Your account number and property ID are discovered automatically. Home Assistant
 | `sensor.powershop_nz_period_coverage_pct` | % of projected bill covered by packs already purchased | % |
 | `sensor.powershop_nz_voucher_balance` | Total redeemable Power Pack balance | NZD |
 | `sensor.powershop_nz_daily_charge` | Daily fixed (standing/line) charge | NZD |
+
+### Rate sensors
+
+Every network has its own set of rates (Unison has Night / Off Peak / Peak / Controlled, Orion's Get Shifty has Peak / Shoulder / Off Peak / Super Off Peak / Weekend, and so on), so the integration creates one sensor for each rate on **your** plan, named after it. If your plan changes and a new rate shows up, its sensor is added on the next update.
+
+Each one has these attributes:
+
+```yaml
+band: Peak
+active_times:          # from your agreement; empty for rates that apply all day, like Controlled
+  - Weekdays 07:00-11:00
+  - Weekdays 17:00-21:00
+rate_incl_gst: $0.3692
+rate_excl_gst: $0.3210
+has_discount: false
+```
+
+### The old rate sensors
+
+`off_peak_rate`, `peak_rate` and `shoulder_rate` guess which rate is which from the names, which doesn't work on every plan (on some plans "Off Peak" actually shows the Night rate and "Shoulder" shows Controlled). They're unchanged so nothing you've built on them breaks, but they'll be removed in a future major version. Switching is just a matter of pointing your cards and automations at the matching `rate_` sensor.
 
 ### Sensor Attributes
 
@@ -92,7 +113,13 @@ Your account number and property ID are discovered automatically. Home Assistant
 **No OTP email?** Check spam, make sure you're using the right address, and try again, i found at some times of day the emails were slow to come through.
 **"Email address not found" during setup** Even if your email is correct, this can happen if your account hasn't yet been migrated to Powershop's new platform. Powershop is doing a staged rollout — check if you can log in at app.powershop.nz first. If you can't, your account isn't on the new system yet and you'll need to wait or contact Powershop.
 
+**Reporting a problem with your rates?** Turn on debug logging for the integration (Settings → Devices & services → Powershop NZ → Enable debug logging), wait for the next update, and include the `Active agreement:` line from the log. It shows your rate names and times but not your address or account number.
+
 ## 📝 Changelog
+
+### v2.2.0
+- New: a sensor for every rate on your plan (`sensor.powershop_nz_rate_<band>`), with an `active_times` attribute showing when each rate applies, read from your agreement. Covers plans with more than three rates, e.g. Super Off Peak and Weekend (#14)
+- `off_peak_rate`, `peak_rate` and `shoulder_rate` are deprecated but unchanged. See [the old rate sensors](#the-old-rate-sensors)
 
 ### v2.1.4 (2026-06-23)
 - Fixed `sensor.powershop_nz_daily_charge` logging a HA validation warning on startup — the sensor was incorrectly using `state_class=MEASUREMENT` with `device_class=MONETARY`, which HA does not allow. The daily standing charge is a fixed tariff rate, not an accumulating total, so it now uses `state_class=None` with no device class — matching the pattern of the other rate sensors
