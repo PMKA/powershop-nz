@@ -30,6 +30,9 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR]
 
+# Set up from the UI only; there is no YAML configuration.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 _SERVICE_GET_HOURLY_USAGE_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CONFIG_ENTRY_ID): str,
