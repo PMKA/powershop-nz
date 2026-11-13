@@ -120,6 +120,7 @@ has_discount: false
 ### v2.2.0
 - New: a sensor for every rate on your plan (`sensor.powershop_nz_rate_<band>`), with an `active_times` attribute showing when each rate applies, read from your agreement. Covers plans with more than three rates, e.g. Super Off Peak and Weekend (#14)
 - `off_peak_rate`, `peak_rate` and `shoulder_rate` are deprecated but unchanged. See [the old rate sensors](#the-old-rate-sensors)
+- Thanks to @Nel-E, whose fork showed that the agreement includes time-of-use schedules
 
 ### v2.1.4 (2026-06-23)
 - Fixed `sensor.powershop_nz_daily_charge` logging a HA validation warning on startup — the sensor was incorrectly using `state_class=MEASUREMENT` with `device_class=MONETARY`, which HA does not allow. The daily standing charge is a fixed tariff rate, not an accumulating total, so it now uses `state_class=None` with no device class — matching the pattern of the other rate sensors
