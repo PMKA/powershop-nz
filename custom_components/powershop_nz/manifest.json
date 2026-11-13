@@ -1,12 +1,13 @@
 {
   "domain": "powershop_nz",
   "name": "Powershop NZ",
-  "version": "2.2.0",
-  "documentation": "https://github.com/PMKA/powershop-nz",
-  "issue_tracker": "https://github.com/PMKA/powershop-nz/issues",
-  "codeowners": ["@PMKA"],
-  "requirements": ["aiohttp>=3.8.0"],
-  "iot_class": "cloud_polling",
+  "codeowners": [
+    "@PMKA"
+  ],
   "config_flow": true,
-  "integration_type": "hub"
+  "documentation": "https://github.com/PMKA/powershop-nz",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/PMKA/powershop-nz/issues",
+  "version": "2.2.0"
 }
