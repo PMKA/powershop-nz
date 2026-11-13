@@ -250,6 +250,53 @@ query Agreements($accountNumber: String!, $propertyId: ID!) {
 }
 """
 
+# Same as _AGREEMENTS_QUERY plus the per-band fields. If the API rejects these, get_agreements
+# falls back to the query above so everything else keeps working.
+_AGREEMENTS_TOU_QUERY = """
+fragment AgreementFields on Agreement {
+  displayName
+  description
+  validFrom
+  validTo
+  rates {
+    label
+    displayLabel
+    hasDiscount
+    formattedRateExcludingTax
+    formattedRateIncludingTax
+    bandCategory
+    touBucketName
+  }
+  timeOfUseSchemes {
+    name
+    timeslots {
+      timeslot
+      activeFrom
+      activeTo
+      weekdays
+      weekends
+    }
+  }
+}
+
+query Agreements($accountNumber: String!, $propertyId: ID!) {
+  account(accountNumber: $accountNumber) {
+    id
+    property(id: $propertyId) {
+      id
+      address
+      meterPoints {
+        id
+        marketIdentifier
+        activeAgreement {
+          ...AgreementFields
+        }
+      }
+    }
+  }
+}
+"""
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -341,6 +388,7 @@ class PowershopAPIClient:
         self._id_token: Optional[str] = None
         self._id_token_expires_at: Optional[datetime] = None
         self._session: Optional[aiohttp.ClientSession] = None
+        self._tou_supported = True
 
     # ------------------------------------------------------------------
     # Session management
@@ -567,10 +615,16 @@ class PowershopAPIClient:
         self, account_number: str, property_id: str
     ) -> Dict[str, Any]:
         """Return active rate agreements for a property."""
-        data = await self._graphql(
-            _AGREEMENTS_QUERY,
-            {"accountNumber": account_number, "propertyId": property_id},
-        )
+        variables = {"accountNumber": account_number, "propertyId": property_id}
+        if self._tou_supported:
+            try:
+                return (await self._graphql(_AGREEMENTS_TOU_QUERY, variables)).get("account", {})
+            except ValueError as err:
+                # Only stop asking if the API doesn't know the fields; a one-off error just falls back once.
+                if "Cannot query field" in str(err):
+                    self._tou_supported = False
+                    _LOGGER.warning("Time-of-use fields not available; rate sensors will have no times")
+        data = await self._graphql(_AGREEMENTS_QUERY, variables)
         return data.get("account", {})
 
     async def get_vouchers(
@@ -616,6 +670,7 @@ class PowershopAPIClient:
 
         # Extract rates from the first meter point's active agreement
         rate_periods: Dict[str, Any] = {}
+        tou_schemes: List[Dict[str, Any]] = []
         property_node = agreement_data.get("property", {})
         for mp in property_node.get("meterPoints", []):
             agreement = mp.get("activeAgreement") or {}
@@ -627,7 +682,11 @@ class PowershopAPIClient:
                     "rate_formatted": rate.get("formattedRateIncludingTax"),
                     "rate_excl_tax": rate.get("formattedRateExcludingTax"),
                     "has_discount": rate.get("hasDiscount", False),
+                    "band_category": rate.get("bandCategory"),
+                    "tou_bucket": rate.get("touBucketName"),
                 }
+            tou_schemes = agreement.get("timeOfUseSchemes") or []
+            _LOGGER.debug("Active agreement: %s", agreement)
             break  # Only process first meter point
 
         # Compute upcoming billing period date ranges (next 5 months)
@@ -832,6 +891,7 @@ class PowershopAPIClient:
             "period_start": period_start,
             "period_end": period_end,
             "rate_periods": rate_periods,
+            "tou_schemes": tou_schemes,
             "account_number": account_number,
             "usage_today_kwh": usage_today_kwh,
             "usage_period_kwh": usage_period_kwh,
